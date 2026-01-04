@@ -27,7 +27,7 @@ io.on('connection', (socket) => {
         const room = rooms[data.roomId];
         if (!room || room.host !== socket.id) return;
         room.gameStarted = true;
-        room.votes = {}; // 重置投票
+        room.votes = {}; 
 
         if (room.gameType === 'spy') {
             const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
@@ -35,7 +35,8 @@ io.on('connection', (socket) => {
             room.players.forEach((p, i) => {
                 io.to(p.id).emit('spy_setup', { word: (i === spyIdx ? pair.s : pair.n), role: (i === spyIdx ? "臥底" : "平民") });
             });
-            // 啟動 60 秒倒數
+
+            // 啟動 60 秒自動倒數
             let timeLeft = 60;
             if (room.timer) clearInterval(room.timer);
             room.timer = setInterval(() => {
@@ -49,18 +50,19 @@ io.on('connection', (socket) => {
         }
         
         const p = room.players[room.turnIdx];
-        io.to(data.roomId).emit('game_begin', { turnId: p.id, turnName: p.name });
+        io.to(data.roomId).emit('game_begin', { turnId: p.id, turnName: p.name, gameType: room.gameType });
     });
 
-    // 解決出題不了：直接鎖定並廣播
+    // 處理出題
     socket.on('set_word', (data) => {
         const room = rooms[data.roomId];
         if (room) {
             room.currentAnswer = data.word.trim();
-            io.to(data.roomId).emit('topic_locked', { painter: socket.username });
+            io.to(data.roomId).emit('topic_locked');
         }
     });
 
+    // 處理投票
     socket.on('cast_vote', (data) => {
         const room = rooms[data.roomId];
         if (room) {
@@ -68,7 +70,5 @@ io.on('connection', (socket) => {
             io.to(data.roomId).emit('vote_update', room.votes);
         }
     });
-
-    // ... 其他繪圖與聊天邏輯 ...
 });
 server.listen(3000, '0.0.0.0');
