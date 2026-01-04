@@ -128,3 +128,36 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => console.log(`伺服器運行於埠號 ${PORT}`));
+// 詞庫設定：n 為平民詞，s 為臥底詞
+const spyWordBank = [
+    { n: "泡麵", s: "快煮麵" }, { n: "西瓜", s: "木瓜" }, 
+    { n: "炸雞", s: "烤雞" }, { n: "滑鼠", s: "觸控板" },
+    { n: "咖啡", s: "奶茶" }, { n: "手機", s: "平板" }
+];
+
+// 在 io.on('connection') 內的 start_game 加入：
+socket.on('start_game', (data) => {
+    const room = rooms[data.roomId];
+    if (!room || room.host !== socket.id) return;
+
+    room.gameStarted = true;
+
+    if (room.gameType === 'spy') {
+        // 隨機選一組詞
+        const pair = spyWordBank[Math.floor(Math.random() * spyWordBank.length)];
+        // 隨機選一個臥底索引
+        const spyIdx = Math.floor(Math.random() * room.players.length);
+        
+        room.players.forEach((p, i) => {
+            const isSpy = (i === spyIdx);
+            // 個別發送身分，防止別人偷看
+            io.to(p.id).emit('spy_setup', {
+                word: isSpy ? pair.s : pair.n,
+                role: isSpy ? "臥底" : "平民"
+            });
+        });
+        
+        io.to(data.roomId).emit('game_begin', { turnId: room.players[0].id, turnName: room.players[0].name });
+    }
+    // ... 其他遊戲模式的邏輯 ...
+});
