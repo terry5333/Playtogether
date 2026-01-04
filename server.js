@@ -5,19 +5,11 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
-// 臥底詞庫
-const spyWords = [
-  { normal: "珍珠奶茶", spy: "絲襪奶茶" },
-  { normal: "炸雞", spy: "烤雞" },
-  { normal: "筆記型電腦", spy: "平板電腦" },
-  { normal: "游泳", spy: "潛水" },
-  { normal: "公車", spy: "捷運" }
-];
 
 io.on('connection', (socket) => {
     socket.on('join_room', (data) => {
@@ -27,7 +19,7 @@ io.on('connection', (socket) => {
         socket.currentRoom = roomId;
 
         if (!rooms[roomId]) {
-            rooms[roomId] = { gameType, host: socket.id, players: [], gameStarted: false };
+            rooms[roomId] = { gameType, host: socket.id, players: [], gameStarted: false, turnIdx: 0 };
         }
         rooms[roomId].players.push({ id: socket.id, name: username });
         io.to(roomId).emit('room_update', rooms[roomId]);
@@ -35,28 +27,41 @@ io.on('connection', (socket) => {
 
     socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
-        if (!room || room.host !== socket.id) return;
-        room.gameStarted = true;
-
-        if (room.gameType === 'bingo') {
-            io.to(data.roomId).emit('game_begin', { winLines: data.winLines });
-        } else if (room.gameType === 'spy') {
-            const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
-            const spyIdx = Math.floor(Math.random() * room.players.length);
-            room.players.forEach((p, idx) => {
-                const word = (idx === spyIdx) ? pair.spy : pair.normal;
-                io.to(p.id).emit('receive_spy_word', { word, role: (idx === spyIdx ? '臥底' : '平民') });
+        if (room && room.host === socket.id) {
+            room.gameStarted = true;
+            room.turnIdx = 0; // 從第一個進房的人開始
+            io.to(data.roomId).emit('game_begin', { 
+                winLines: data.winLines,
+                turnId: room.players[room.turnIdx].id,
+                turnName: room.players[room.turnIdx].name
             });
-            io.to(data.roomId).emit('game_begin', {});
-        } else {
-            io.to(data.roomId).emit('game_begin', {});
         }
     });
 
-    socket.on('bingo_click', (data) => io.to(data.roomId).emit('bingo_sync', data.num));
-    socket.on('bingo_win', (data) => io.to(data.roomId).emit('round_over', { winner: data.name, msg: `達成 ${data.lines} 條線連線！` }));
-    socket.on('drawing', (data) => socket.to(data.roomId).emit('render_drawing', data));
-    socket.on('send_chat', (data) => io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg }));
+    socket.on('bingo_click', (data) => {
+        const room = rooms[data.roomId];
+        if (!room) return;
+        
+        // 驗證是否為該玩家的回合
+        if (room.players[room.turnIdx].id === socket.id) {
+            io.to(data.roomId).emit('bingo_sync', data.num);
+            
+            // 切換下一位玩家
+            room.turnIdx = (room.turnIdx + 1) % room.players.length;
+            io.to(data.roomId).emit('next_turn', {
+                turnId: room.players[room.turnIdx].id,
+                turnName: room.players[room.turnIdx].name
+            });
+        }
+    });
+
+    socket.on('bingo_win', (data) => {
+        io.to(data.roomId).emit('round_over', { winner: data.name });
+    });
+
+    socket.on('send_chat', (data) => {
+        io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg });
+    });
 
     socket.on('disconnect', () => {
         const rId = socket.currentRoom;
