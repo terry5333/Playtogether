@@ -11,10 +11,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
 
-// 誰是臥底的題庫
+// 誰是臥底題庫 (平民詞, 臥底詞)
 const spyWords = [
     ["蘋果", "水梨"], ["電腦", "筆電"], ["跑步", "競走"], 
-    ["泡麵", "拉麵"], ["手錶", "鬧鐘"], ["醫生", "護士"]
+    ["泡麵", "拉麵"], ["手錶", "鬧鐘"], ["醫生", "護士"],
+    ["吉他", "尤克里里"], ["漢堡", "三明治"], ["森林", "公園"]
 ];
 
 io.on('connection', (socket) => {
@@ -27,15 +28,14 @@ io.on('connection', (socket) => {
 
         if (!rooms[rId]) {
             rooms[rId] = {
-                gameType: gameType, // 'bingo' 或 'spy'
+                gameType: gameType,
                 host: socket.id,
                 maxPlayers: parseInt(maxPlayers) || 2,
                 winLines: parseInt(winLines) || 3,
                 players: [],
                 turnIndex: 0,
                 isFinished: false,
-                gameStarted: false,
-                spyWordPair: []
+                gameStarted: false
             };
         }
 
@@ -52,7 +52,6 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 開始遊戲邏輯 (相容 Bingo 與 誰是臥底)
     socket.on('start_game', (roomId) => {
         const room = rooms[roomId];
         if (!room || room.host !== socket.id) return;
@@ -65,7 +64,6 @@ io.on('connection', (socket) => {
                 nextTurnName: room.players[room.turnIndex].name
             });
         } else if (room.gameType === 'spy') {
-            // 誰是臥底：隨機挑選詞語與臥底
             const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
             const spyIdx = Math.floor(Math.random() * room.players.length);
             room.players.forEach((p, idx) => {
@@ -76,13 +74,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Bingo 喊號邏輯
     socket.on('game_move', (data) => {
         const room = rooms[data.roomId];
         if (room && room.gameStarted && !room.isFinished) {
             const currentPlayer = room.players[room.turnIndex];
             if (socket.id !== currentPlayer.id) return;
-
             room.turnIndex = (room.turnIndex + 1) % room.players.length;
             io.to(data.roomId).emit('receive_move', {
                 number: data.number,
@@ -115,4 +111,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Server on ${PORT}`));
