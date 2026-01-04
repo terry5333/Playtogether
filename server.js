@@ -1,11 +1,13 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const path = require('path');
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
 
@@ -13,7 +15,7 @@ io.on('connection', (socket) => {
     socket.on('join_room', (data) => {
         const { roomId, username, gameType } = data;
         if (!roomId || !username) return;
-        
+
         socket.join(roomId);
         socket.username = username;
         socket.roomId = roomId;
@@ -26,7 +28,7 @@ io.on('connection', (socket) => {
                 gameStarted: false, 
                 turnIdx: 0, 
                 currentAnswer: "", 
-                targetLines: 3 
+                winLines: 3 
             };
         }
         rooms[roomId].players.push({ id: socket.id, name: username });
@@ -38,7 +40,7 @@ io.on('connection', (socket) => {
         if (!room || room.host !== socket.id) return;
 
         room.gameStarted = true;
-        room.targetLines = parseInt(data.winLines) || 3;
+        room.winLines = parseInt(data.winLines) || 3;
         room.turnIdx = 0;
         
         sendTurnUpdate(data.roomId);
@@ -46,48 +48,49 @@ io.on('connection', (socket) => {
 
     function sendTurnUpdate(roomId) {
         const room = rooms[roomId];
-        if (!room || room.players.length === 0) return;
+        if (!room) return;
 
         const currentPlayer = room.players[room.turnIdx];
-        room.currentAnswer = ""; 
+        room.currentAnswer = ""; // 換人時清空上一題答案
         
         io.to(roomId).emit('game_begin', { 
             turnId: currentPlayer.id, 
             turnName: currentPlayer.name, 
-            winLines: room.targetLines,
+            winLines: room.winLines,
             gameType: room.gameType
         });
     }
-
-    // 你畫我猜：處理正確答案
-    socket.on('send_chat', (data) => {
-        const room = rooms[data.roomId];
-        if (!room) return;
-
-        if (room.gameType === 'draw' && room.currentAnswer && data.msg.trim() === room.currentAnswer.trim()) {
-            io.to(data.roomId).emit('chat_msg', { name: "📢 系統", msg: `恭喜 ${socket.username} 猜對了！答案是【${room.currentAnswer}】` });
-            
-            // 延遲換人，避免太突然
-            setTimeout(() => {
-                if (rooms[data.roomId]) {
-                    rooms[data.roomId].turnIdx = (rooms[data.roomId].turnIdx + 1) % rooms[data.roomId].players.length;
-                    sendTurnUpdate(data.roomId);
-                    io.to(data.roomId).emit('clear_canvas');
-                }
-            }, 2000);
-        } else {
-            io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg });
-        }
-    });
 
     socket.on('drawing', (data) => {
         if (data.roomId) socket.to(data.roomId).emit('render_drawing', data);
     });
 
     socket.on('set_word', (data) => {
-        if (rooms[data.roomId]) {
-            rooms[data.roomId].currentAnswer = data.word;
-            io.to(data.roomId).emit('chat_msg', { name: "🎨 系統", msg: "畫家已經出題，大家開動腦筋！" });
+        const room = rooms[data.roomId];
+        if (room) {
+            room.currentAnswer = data.word.trim();
+            io.to(data.roomId).emit('chat_msg', { name: "🎨 系統", msg: "畫家已出題，請開始搶答！" });
+        }
+    });
+
+    socket.on('send_chat', (data) => {
+        const room = rooms[data.roomId];
+        if (!room) return;
+
+        // 你畫我猜：判定答案
+        if (room.gameType === 'draw' && room.currentAnswer && data.msg.trim() === room.currentAnswer) {
+            io.to(data.roomId).emit('chat_msg', { name: "🎉 系統", msg: `恭喜 ${socket.username} 猜對了！答案是【${room.currentAnswer}】` });
+            
+            // 猜對後 3 秒自動換下一位畫家
+            setTimeout(() => {
+                if (rooms[data.roomId]) {
+                    rooms[data.roomId].turnIdx = (rooms[data.roomId].turnIdx + 1) % rooms[data.roomId].players.length;
+                    sendTurnUpdate(data.roomId);
+                    io.to(data.roomId).emit('clear_canvas');
+                }
+            }, 3000);
+        } else {
+            io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg });
         }
     });
 
@@ -102,10 +105,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('bingo_win', (data) => {
-        io.to(data.roomId).emit('game_over', { 
-            msg: `🎉 ${data.name} 勝利！`, 
-            subMsg: `率先達成 ${rooms[data.roomId]?.targetLines || 3} 條連線！` 
-        });
+        const room = rooms[data.roomId];
+        if(room) {
+            io.to(data.roomId).emit('game_over', { 
+                msg: `🏆 ${data.name} 獲勝！`, 
+                subMsg: `率先連成 ${room.winLines} 條線！` 
+            });
+        }
     });
 
     socket.on('disconnect', () => {
@@ -120,4 +126,5 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3000, '0.0.0.0');
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => console.log(`伺服器運行於埠號 ${PORT}`));
