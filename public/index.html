@@ -3,80 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PlayTogether - 多遊戲合輯</title>
+    <title>PlayTogether - 修正版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #F2F0EB; color: #5F6368; font-family: sans-serif; }
+        body { background-color: #F2F0EB; color: #5F6368; }
         .morandi-card { background: white; border-radius: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
-        .btn-blue { background-color: #A3B9C9; color: white; transition: all 0.3s; }
-        .btn-blue:hover { opacity: 0.8; }
+        .btn-blue { background-color: #A3B9C9; color: white; }
         .btn-green { background-color: #B4C4B8; color: white; }
         .cell-marked { background-color: #A3B9C9 !important; color: white; border: none; }
+        .hidden { display: none; }
     </style>
 </head>
 <body class="min-h-screen p-4 flex flex-col items-center">
 
-    <div class="w-full max-w-md morandi-card p-8 border border-gray-100">
+    <div class="w-full max-w-md morandi-card p-8 border border-gray-100 mt-10">
         
-        <div id="step-0" class="space-y-6">
-            <h1 class="text-2xl text-center font-light tracking-widest text-gray-400 mb-8 uppercase">PlayTogether</h1>
+        <div id="step-0" class="space-y-6 text-center">
+            <h1 class="text-2xl font-light tracking-widest text-gray-400 mb-8">PLAY TOGETHER</h1>
             <div onclick="selectGame('bingo')" class="p-6 border rounded-3xl cursor-pointer hover:bg-gray-50 transition-all border-blue-100">
                 <h2 class="text-[#A3B9C9] font-bold">經典 BINGO</h2>
-                <p class="text-xs text-gray-400 mt-1">自訂號碼，連線對戰</p>
+                <p class="text-xs text-gray-400 mt-1">連線、喊號、對戰</p>
             </div>
             <div onclick="selectGame('spy')" class="p-6 border rounded-3xl cursor-pointer hover:bg-gray-50 transition-all border-green-100">
                 <h2 class="text-[#B4C4B8] font-bold">誰是臥底</h2>
-                <p class="text-xs text-gray-400 mt-1">語文邏輯，找出隱藏的玩家</p>
+                <p class="text-xs text-gray-400 mt-1">觀察描述、找出內鬼</p>
             </div>
         </div>
 
         <div id="step-1" class="hidden text-center space-y-6">
-            <h2 id="game-title" class="text-lg text-gray-300 uppercase tracking-widest"></h2>
+            <h2 id="game-title" class="text-lg text-gray-300 tracking-widest uppercase"></h2>
             <input type="text" id="nameInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none" placeholder="輸入您的暱稱">
-            <button onclick="toLobby()" class="w-full btn-blue py-4 rounded-2xl font-medium">確定</button>
+            <button onclick="toLobby()" class="w-full btn-blue py-4 rounded-2xl font-medium">下一步</button>
+            <p onclick="location.reload()" class="text-[10px] text-gray-300 cursor-pointer">返回選擇遊戲</p>
         </div>
 
-        <div id="step-2" class="hidden space-y-8">
-            <div class="space-y-3">
-                <h3 class="text-[10px] font-bold text-gray-300 uppercase">創建房間</h3>
-                <input type="text" id="roomIdInp" placeholder="設定房號" class="w-full p-3 bg-gray-50 rounded-xl outline-none">
-                <div id="bingo-settings" class="grid grid-cols-2 gap-2">
-                    <input type="number" id="cMaxP" value="2" class="p-2 bg-gray-50 rounded-lg text-center text-xs" title="人數">
-                    <input type="number" id="cWinL" value="3" class="p-2 bg-gray-50 rounded-lg text-center text-xs" title="線數">
-                </div>
-                <button onclick="join(true)" class="w-full btn-blue py-3 rounded-xl text-sm">建立房間</button>
+        <div id="step-2" class="hidden space-y-6">
+            <div class="flex border-b border-gray-100">
+                <button id="tab-create" onclick="switchTab('create')" class="flex-1 py-3 text-sm font-bold border-b-2 border-[#A3B9C9] text-[#A3B9C9]">建立房間</button>
+                <button id="tab-join" onclick="switchTab('join')" class="flex-1 py-3 text-sm font-bold text-gray-300">加入房間</button>
             </div>
-            <div class="relative py-2 text-center text-[10px] text-gray-200 uppercase">OR</div>
-            <button onclick="join(false)" class="w-full btn-green py-3 rounded-xl text-sm">加入現有房間</button>
+
+            <div id="area-create" class="space-y-4">
+                <input type="text" id="cRoomId" placeholder="設定 4 位數房號" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-gray-300 pl-2">預計人數</label>
+                        <input type="number" id="cMaxP" value="2" class="w-full p-3 bg-gray-50 rounded-xl text-center">
+                    </div>
+                    <div id="bingo-win-area" class="space-y-1">
+                        <label class="text-[10px] text-gray-300 pl-2">勝出線數</label>
+                        <input type="number" id="cWinL" value="3" class="w-full p-3 bg-gray-50 rounded-xl text-center">
+                    </div>
+                </div>
+                <button onclick="join(true)" class="w-full btn-blue py-4 rounded-2xl font-medium">完成並進入</button>
+            </div>
+
+            <div id="area-join" class="hidden space-y-4">
+                <input type="text" id="jRoomId" placeholder="輸入好友的房號" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none">
+                <button onclick="join(false)" class="w-full btn-green py-4 rounded-2xl font-medium">立即進入</button>
+            </div>
         </div>
 
         <div id="step-3-bingo" class="hidden">
-            <div class="flex justify-between items-center mb-6 text-[10px] text-gray-300 font-bold">
-                <span>自訂 1-25 位置</span>
-                <span id="fill-hint" class="bg-gray-100 px-2 py-1 rounded-full">填入: 1</span>
+            <div class="flex justify-between items-center mb-4 text-[10px] text-gray-300">
+                <span>依序填入 1-25</span>
+                <span id="fill-hint" class="bg-blue-50 text-[#A3B9C9] px-3 py-1 rounded-full">下個數字: 1</span>
             </div>
             <div id="fillGrid" class="grid grid-cols-5 gap-2"></div>
-            <button id="readyBtn" onclick="ready()" disabled class="w-full mt-8 bg-gray-200 text-white py-4 rounded-2xl">填滿數字後開始</button>
+            <button id="readyBtn" onclick="ready()" disabled class="w-full mt-6 bg-gray-100 text-white py-4 rounded-2xl">填號中...</button>
         </div>
 
         <div id="step-4" class="hidden">
-            <div id="player-list" class="flex flex-wrap gap-2 mb-4"></div>
+            <div class="flex justify-between items-center mb-4">
+                <div id="player-list" class="flex flex-wrap gap-1"></div>
+                <div id="room-info" class="text-[10px] text-gray-300"></div>
+            </div>
             
             <div id="bingo-ui" class="hidden">
-                <div id="turn-display" class="w-full py-2 mb-4 rounded-xl text-center text-[10px] font-bold bg-gray-100">等待開始</div>
-                <div id="gameGrid" class="grid grid-cols-5 gap-2 mb-6"></div>
+                <div id="turn-display" class="w-full py-2 mb-4 rounded-xl text-center text-[10px] font-bold bg-gray-50 text-gray-400">等待房主</div>
+                <div id="gameGrid" class="grid grid-cols-5 gap-2"></div>
             </div>
 
-            <div id="spy-ui" class="hidden text-center space-y-6">
-                <div class="p-8 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
-                    <p class="text-[10px] text-gray-400 uppercase mb-2 tracking-widest">您的詞語</p>
-                    <h2 id="spy-word-display" class="text-3xl font-bold text-slate-600">????</h2>
+            <div id="spy-ui" class="hidden text-center space-y-8 py-6">
+                <div class="bg-gray-50 p-10 rounded-[2.5rem] border-2 border-dashed border-gray-100">
+                    <p class="text-[10px] text-gray-300 tracking-[0.2em] mb-4">YOUR SECRET WORD</p>
+                    <h2 id="spy-word-display" class="text-4xl font-bold text-slate-500">????</h2>
                 </div>
-                <p class="text-xs text-gray-400">請輪流描述詞語，找出臥底！</p>
+                <p class="text-xs text-gray-400 leading-relaxed">請輪流描述你的詞語<br>找出那個拿到「不同詞語」的人！</p>
             </div>
 
-            <div id="log" class="text-center text-[10px] italic text-gray-300 mt-4 min-h-[20px]"></div>
-            <button id="startBtn" onclick="sendStart()" class="hidden w-full btn-blue py-3 rounded-xl mt-6">開始遊戲</button>
+            <div id="log" class="text-center text-[10px] italic text-gray-300 mt-6 min-h-[1.5rem]"></div>
+            
+            <div id="host-controls" class="hidden space-y-2 mt-6">
+                <p id="start-condition" class="text-center text-[10px] text-gray-300"></p>
+                <button id="startBtn" onclick="sendStart()" class="w-full btn-blue py-4 rounded-2xl font-medium shadow-lg">開始遊戲</button>
+            </div>
         </div>
     </div>
 
@@ -89,25 +110,36 @@
             selectedGame = g;
             document.getElementById('step-0').classList.add('hidden');
             document.getElementById('step-1').classList.remove('hidden');
-            document.getElementById('game-title').innerText = g.toUpperCase();
-            if(g === 'spy') document.getElementById('bingo-settings').classList.add('hidden');
+            document.getElementById('game-title').innerText = (g==='bingo'?'BINGO':'誰是臥底');
+            if(g === 'spy') document.getElementById('bingo-win-area').classList.add('hidden');
         }
 
         function toLobby() {
             myName = document.getElementById('nameInp').value;
-            if(!myName) return;
+            if(!myName) return alert("請輸入暱稱");
             document.getElementById('step-1').classList.add('hidden');
             document.getElementById('step-2').classList.remove('hidden');
         }
 
+        function switchTab(type) {
+            const isCreate = type === 'create';
+            document.getElementById('area-create').classList.toggle('hidden', !isCreate);
+            document.getElementById('area-join').classList.toggle('hidden', isCreate);
+            document.getElementById('tab-create').className = `flex-1 py-3 text-sm font-bold border-b-2 ${isCreate?'border-[#A3B9C9] text-[#A3B9C9]':'border-transparent text-gray-300'}`;
+            document.getElementById('tab-join').className = `flex-1 py-3 text-sm font-bold border-b-2 ${!isCreate?'border-[#B4C4B8] text-[#B4C4B8]':'border-transparent text-gray-300'}`;
+        }
+
         function join(h) {
             isHost = h;
-            curRoom = document.getElementById('roomIdInp').value || "Default";
+            curRoom = h ? document.getElementById('cRoomId').value : document.getElementById('jRoomId').value;
+            if(!curRoom) return alert("請輸入房號");
+            
             socket.emit('join_room', { 
                 roomId: curRoom, username: myName, gameType: selectedGame,
                 maxPlayers: document.getElementById('cMaxP').value,
                 winLines: document.getElementById('cWinL').value
             });
+            
             document.getElementById('step-2').classList.add('hidden');
             if(selectedGame === 'bingo') initFill(); else ready();
         }
@@ -117,16 +149,17 @@
             const g = document.getElementById('fillGrid'); g.innerHTML = '';
             for(let i=0; i<25; i++) {
                 const b = document.createElement('button');
-                b.className = "aspect-square bg-gray-50 rounded-xl text-gray-300 font-bold";
+                b.className = "aspect-square bg-gray-50 rounded-xl text-gray-300 font-bold text-sm";
                 b.onclick = () => {
                     if(myLayout[i]) return;
                     myLayout[i] = fillCount; b.innerText = fillCount;
-                    b.className = "aspect-square bg-white border border-blue-100 rounded-xl text-blue-400 font-bold shadow-sm";
+                    b.className = "aspect-square bg-white border border-blue-100 rounded-xl text-[#A3B9C9] font-bold shadow-sm";
                     fillCount++;
                     if(fillCount > 25) {
                         document.getElementById('readyBtn').disabled = false;
-                        document.getElementById('readyBtn').className = "w-full mt-8 btn-blue py-4 rounded-2xl";
-                    } else document.getElementById('fill-hint').innerText = `填入: ${fillCount}`;
+                        document.getElementById('readyBtn').className = "w-full mt-6 btn-blue py-4 rounded-2xl";
+                        document.getElementById('readyBtn').innerText = "準備好了";
+                    } else document.getElementById('fill-hint').innerText = `下個數字: ${fillCount}`;
                 };
                 g.appendChild(b);
             }
@@ -135,12 +168,12 @@
         function ready() {
             document.getElementById('step-3-bingo').classList.add('hidden');
             document.getElementById('step-4').classList.remove('hidden');
-            if(isHost) document.getElementById('startBtn').classList.remove('hidden');
+            document.getElementById('room-info').innerText = `ROOM: ${curRoom}`;
             
             if(selectedGame === 'bingo') {
                 document.getElementById('bingo-ui').classList.remove('hidden');
                 const g = document.getElementById('gameGrid'); g.innerHTML = '';
-                myLayout.forEach((num, idx) => {
+                myLayout.forEach((num) => {
                     const b = document.createElement('button');
                     b.className = "aspect-square bg-white border border-gray-100 rounded-xl text-lg font-medium text-gray-400";
                     b.innerText = num; b.id = `cell-${num}`;
@@ -158,7 +191,7 @@
             const btn = document.getElementById(`cell-${num}`);
             if(btn && !btn.disabled) {
                 btn.disabled = true;
-                btn.className = "aspect-square cell-marked rounded-xl text-lg font-bold";
+                btn.className = "aspect-square cell-marked rounded-xl text-lg font-bold shadow-inner opacity-80";
                 boardState[myLayout.indexOf(num)] = true;
                 isMyTurn = false; updateBingoTurnUI(); checkBingoWin();
             }
@@ -179,20 +212,34 @@
         function updateBingoTurnUI(nextName) {
             const t = document.getElementById('turn-display');
             if(isMyTurn) {
-                t.innerText = "輪到你了"; t.className = "w-full py-2 mb-4 rounded-xl text-center text-[10px] font-bold bg-[#B4C4B8] text-white";
+                t.innerText = "YOUR TURN | 請喊號"; t.className = "w-full py-2 mb-4 rounded-xl text-center text-[10px] font-bold btn-green animate-pulse";
             } else {
-                t.innerText = nextName ? `輪到 ${nextName}` : "等待中";
-                t.className = "w-full py-2 mb-4 rounded-xl text-center text-[10px] font-bold bg-gray-100 text-gray-400";
+                t.innerText = nextName ? `WAITING | 輪到 ${nextName}` : "WAITING...";
+                t.className = "w-full py-2 mb-4 rounded-xl text-center text-[10px] font-bold bg-gray-50 text-gray-300";
             }
         }
 
         socket.on('room_update', (d) => {
             const list = document.getElementById('player-list');
             list.innerHTML = d.players.map(p => `<span class="px-3 py-1 bg-gray-50 text-[10px] rounded-full border border-gray-100">${p.name}${p.id===d.host?'★':''}</span>`).join('');
+            
+            if(isHost && !d.gameStarted) {
+                document.getElementById('host-controls').classList.remove('hidden');
+                const cond = document.getElementById('start-condition');
+                if(d.players.length < d.maxPlayers) {
+                    cond.innerText = `等待人數滿額 (${d.players.length}/${d.maxPlayers})`;
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('startBtn').className = "w-full bg-gray-100 text-white py-4 rounded-2xl cursor-not-allowed";
+                } else {
+                    cond.innerText = "人數已滿，可以開始遊戲";
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('startBtn').className = "w-full btn-blue py-4 rounded-2xl font-medium shadow-lg";
+                }
+            }
         });
 
         socket.on('game_begin', (d) => {
-            document.getElementById('startBtn').classList.add('hidden');
+            document.getElementById('host-controls').classList.add('hidden');
             isMyTurn = (socket.id === d.nextTurnId);
             updateBingoTurnUI(d.nextTurnName);
         });
@@ -201,15 +248,16 @@
             mark(d.number);
             isMyTurn = (socket.id === d.nextTurnId);
             updateBingoTurnUI(d.nextTurnName);
+            document.getElementById('log').innerText = `${d.senderName} 喊了號碼 ${d.number}`;
         });
 
         socket.on('receive_spy_word', (d) => {
             document.getElementById('spy-word-display').innerText = d.word;
-            document.getElementById('startBtn').classList.add('hidden');
+            document.getElementById('host-controls').classList.add('hidden');
         });
 
         socket.on('game_over', (d) => {
-            alert(`🏆 優勝者：${d.winner}`);
+            alert(`🎉 遊戲結束！贏家是：${d.winner}`);
             location.reload();
         });
     </script>
