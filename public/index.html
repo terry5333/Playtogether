@@ -7,78 +7,83 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root { --blue: #A3B9C9; --green: #2F4F4F; --bg: #F2F0EB; }
-        body { background-color: var(--bg); color: var(--green); touch-action: none; overflow: hidden; font-family: sans-serif; }
-        .morandi-card { background: white; border-radius: 2rem; box-shadow: 0 10px 40px rgba(0,0,0,0.03); }
+        body { background-color: var(--bg); color: var(--green); font-family: sans-serif; overflow: hidden; touch-action: none; }
+        .morandi-card { background: white; border-radius: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
         .btn-green { background-color: var(--green); color: white; }
         .btn-blue { background-color: var(--blue); color: white; }
-        .bingo-cell { aspect-ratio: 1/1; border: 1px solid #efefef; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; font-weight: bold; background: #fff; cursor: pointer; font-size: 1.2rem; }
-        .cell-filled { background-color: #f0f4f7; color: var(--blue); border-color: var(--blue); }
-        .cell-marked { background-color: var(--green) !important; color: white !important; transform: scale(0.9); }
-        #canvas { background: white; border-radius: 1.5rem; width: 100%; height: 350px; border: 2px solid #eee; touch-action: none; }
+        .bingo-cell { aspect-ratio: 1/1; border: 1px solid #eee; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; font-weight: bold; background: #fff; cursor: pointer; }
+        .cell-marked { background-color: var(--green) !important; color: white !important; }
+        .cell-filled { background-color: #f0f4f7; color: var(--blue); }
+        #canvas { background: white; border-radius: 1rem; width: 100%; height: 320px; border: 2px solid #eee; touch-action: none; }
         .hidden { display: none !important; }
     </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
 
     <div id="login-panel" class="w-full max-w-sm morandi-card p-8 space-y-6">
-        <h1 class="text-3xl font-black text-center tracking-tighter">GAME HUB</h1>
+        <h1 class="text-2xl font-black text-center">GAME HUB</h1>
         <div class="space-y-4">
-            <input type="text" id="nameInp" placeholder="你的暱稱" class="w-full p-4 bg-gray-50 rounded-2xl outline-none border-2 border-transparent focus:border-[#A3B9C9]">
-            <input type="text" id="roomInp" placeholder="房間號碼" class="w-full p-4 bg-gray-50 rounded-2xl outline-none border-2 border-transparent focus:border-[#A3B9C9]">
+            <input type="text" id="nameInp" placeholder="暱稱" class="w-full p-4 bg-gray-50 rounded-2xl outline-none">
+            <input type="text" id="roomInp" placeholder="房號" class="w-full p-4 bg-gray-50 rounded-2xl outline-none">
         </div>
         <div class="grid gap-3">
-            <button onclick="confirmJoin('bingo')" class="p-4 btn-blue rounded-2xl font-bold">🔢 賓果 BINGO</button>
-            <button onclick="confirmJoin('draw')" class="p-4 btn-green rounded-2xl font-bold">🎨 你畫我猜</button>
+            <button onclick="confirmJoin('bingo')" class="p-4 btn-blue rounded-2xl font-bold">BINGO</button>
+            <button onclick="confirmJoin('draw')" class="p-4 btn-green rounded-2xl font-bold">你畫我猜</button>
+            <button onclick="confirmJoin('spy')" class="p-4 border-2 border-[#2F4F4F] rounded-2xl font-bold">誰是臥底</button>
         </div>
     </div>
 
-    <div id="game-panel" class="hidden w-full max-w-md morandi-card p-6 flex flex-col relative" style="height: 94vh;">
-        <div class="flex justify-between items-center mb-4">
-            <div id="status-tag" class="px-4 py-1 rounded-full btn-green text-[10px] font-bold">等待玩家</div>
-            <div id="room-display" class="text-xs opacity-30 font-mono"></div>
+    <div id="game-panel" class="hidden w-full max-w-md morandi-card p-6 flex flex-col relative" style="height: 92vh;">
+        <div class="flex justify-between items-center mb-4 text-[10px] font-bold">
+            <div id="status-tag" class="px-3 py-1 rounded-full btn-green">等待開始</div>
+            <div id="room-display" class="opacity-30"></div>
         </div>
+        <div id="player-list" class="flex gap-2 mb-4 overflow-x-auto min-h-[30px]"></div>
 
-        <div id="player-list" class="flex gap-2 overflow-x-auto mb-4 pb-2 min-h-[40px]"></div>
-
-        <div class="flex-1 overflow-y-auto space-y-4 pr-1">
+        <div class="flex-1 overflow-y-auto space-y-4">
             <div id="bingo-ui" class="hidden space-y-3">
-                <div class="flex justify-between items-center text-[10px] font-bold">
-                    <span id="target-msg">請在下方填入 1-25</span>
-                    <button onclick="autoFill()" class="text-blue-500 bg-blue-50 px-3 py-1 rounded-lg">🎲 隨機填號</button>
+                <div class="flex justify-between items-center text-[10px]">
+                    <span id="target-msg">填滿 25 格</span>
+                    <button onclick="autoFill()" class="text-blue-500 bg-blue-50 px-2 py-1 rounded">隨機填號</button>
                 </div>
                 <div id="bingo-grid" class="grid grid-cols-5 gap-2"></div>
-                <div id="host-bingo-config" class="hidden bg-gray-50 p-4 rounded-2xl text-xs flex justify-between items-center">
-                    <span>目標連線：</span>
-                    <select id="win-lines-select" class="bg-white border p-1 rounded-md outline-none">
-                        <option value="1">1 條線</option><option value="2">2 條線</option><option value="3" selected>3 條線</option><option value="5">5 條線</option>
+                <div id="host-bingo-config" class="hidden bg-gray-50 p-3 rounded-xl flex justify-between items-center text-xs">
+                    <span>目標線數：</span>
+                    <select id="win-select" class="bg-white border p-1 rounded">
+                        <option value="1">1條</option><option value="3" selected>3條</option><option value="5">5條</option>
                     </select>
                 </div>
             </div>
 
-            <div id="draw-ui" class="hidden space-y-3">
-                <div id="painter-tools" class="hidden bg-blue-50 p-3 rounded-2xl flex gap-2">
-                    <input id="topicInp" class="flex-1 p-2 rounded-xl text-xs outline-none" placeholder="設定題目後按出題...">
-                    <button onclick="submitTopic()" class="px-4 btn-green rounded-xl text-xs font-bold">出題</button>
+            <div id="draw-ui" class="hidden space-y-2">
+                <div id="painter-tools" class="hidden bg-blue-50 p-2 rounded-xl flex gap-2">
+                    <input id="topicInp" class="flex-1 p-2 rounded text-xs outline-none" placeholder="輸入題目...">
+                    <button onclick="submitTopic()" class="px-4 btn-green rounded text-xs">出題</button>
                 </div>
-                <canvas id="canvas" width="600" height="600"></canvas>
+                <canvas id="canvas" width="500" height="500"></canvas>
             </div>
 
-            <div id="chat-box" class="h-32 overflow-y-auto bg-gray-50 rounded-2xl p-4 text-[11px] space-y-1 border-t"></div>
+            <div id="spy-ui" class="hidden flex flex-col items-center py-6 space-y-4">
+                <div id="spy-card" onclick="toggleSpy()" class="w-40 h-56 bg-gray-100 rounded-3xl flex items-center justify-center cursor-pointer border-2 border-dashed border-gray-300">
+                    <span id="spy-word" class="text-xl font-bold text-gray-400">點擊翻開</span>
+                </div>
+                <div id="spy-role" class="text-[10px] btn-blue px-4 py-1 rounded-full">身分發送中</div>
+            </div>
+
+            <div id="chat-box" class="h-28 overflow-y-auto bg-gray-50 rounded-2xl p-4 text-[10px] space-y-1 border"></div>
         </div>
 
-        <div class="mt-4 space-y-3">
+        <div class="mt-4 space-y-2">
             <div class="flex gap-2">
-                <input type="text" id="chatInp" class="flex-1 p-4 bg-gray-50 rounded-2xl text-sm outline-none" placeholder="輸入聊天或答案...">
+                <input type="text" id="chatInp" class="flex-1 p-4 bg-gray-50 rounded-2xl text-sm outline-none" placeholder="輸入內容...">
                 <button onclick="sendMessage()" class="px-6 btn-blue rounded-2xl font-bold">送出</button>
             </div>
-            <button id="startBtn" onclick="sendStart()" class="hidden w-full p-4 btn-green rounded-2xl font-bold shadow-lg">開始遊戲</button>
+            <button id="startBtn" onclick="sendStart()" class="hidden w-full p-4 btn-green rounded-2xl font-bold">開始遊戲</button>
         </div>
 
-        <div id="result-overlay" class="absolute inset-0 z-50 bg-white/98 hidden flex flex-col items-center justify-center p-8 rounded-[2rem] text-center">
-            <div class="text-6xl mb-4">✨</div>
-            <h2 id="result-title" class="text-3xl font-black mb-2"></h2>
-            <p id="result-desc" class="text-sm opacity-50 mb-8"></p>
-            <button onclick="location.reload()" class="w-full p-4 btn-blue rounded-2xl font-bold">回到大廳</button>
+        <div id="result-overlay" class="absolute inset-0 z-50 bg-white/95 hidden flex flex-col items-center justify-center p-8 text-center rounded-[2rem]">
+            <h2 id="result-title" class="text-2xl font-bold mb-8"></h2>
+            <button onclick="location.reload()" class="w-full p-4 btn-blue rounded-2xl font-bold">回大廳</button>
         </div>
     </div>
 
@@ -86,39 +91,30 @@
     <script>
         const socket = io();
         let myName, curRoom, myGame, isHost = false, isMyTurn = false, isPainter = false, gameStarted = false;
-        let bingoLayout = Array(25).fill(null), fillCount = 1, markedCells = Array(25).fill(false), winTarget = 3;
-        const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
+        let bingoLayout = Array(25).fill(null), fillCount = 1, markedCells = Array(25).fill(false), winTarget = 3, mySecret = "";
 
-        // --- 繪圖邏輯：精準座標校正 ---
+        // 畫圖座標修復
+        const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
         let drawing = false, lastX = 0, lastY = 0;
         function getPos(e) {
-            const rect = canvas.getBoundingClientRect();
+            const r = canvas.getBoundingClientRect();
             const cx = e.touches ? e.touches[0].clientX : e.clientX;
             const cy = e.touches ? e.touches[0].clientY : e.clientY;
-            return {
-                x: (cx - rect.left) * (canvas.width / rect.width),
-                y: (cy - rect.top) * (canvas.height / rect.height)
-            };
+            return { x: (cx - r.left) * (canvas.width / r.width), y: (cy - r.top) * (canvas.height / r.height) };
         }
-        function startDraw(e) { if (!isPainter || !gameStarted) return; drawing = true; const p = getPos(e); [lastX, lastY] = [p.x, p.y]; }
-        function moveDraw(e) {
-            if (!drawing || !isPainter) return; e.preventDefault();
-            const p = getPos(e);
-            const data = { x: p.x, y: p.y, lastX, lastY, roomId: curRoom };
-            socket.emit('drawing', data);
-            renderLine(data);
-            [lastX, lastY] = [p.x, p.y];
+        function start(e) { if (!isPainter || !gameStarted) return; drawing = true; const p = getPos(e); [lastX, lastY] = [p.x, p.y]; }
+        function move(e) {
+            if (!drawing) return; e.preventDefault();
+            const p = getPos(e); const d = { x: p.x, y: p.y, lastX, lastY, roomId: curRoom };
+            socket.emit('drawing', d); drawLine(d); [lastX, lastY] = [p.x, p.y];
         }
-        function renderLine(d) {
-            ctx.beginPath(); ctx.strokeStyle = "#2F4F4F"; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round";
-            ctx.moveTo(d.lastX, d.lastY); ctx.lineTo(d.x, d.y); ctx.stroke();
-        }
-        canvas.addEventListener('mousedown', startDraw); canvas.addEventListener('mousemove', moveDraw); window.addEventListener('mouseup', () => drawing = false);
-        canvas.addEventListener('touchstart', startDraw, {passive:false}); canvas.addEventListener('touchmove', moveDraw, {passive:false});
-        socket.on('render_drawing', renderLine);
-        socket.on('clear_canvas', () => ctx.clearRect(0, 0, canvas.width, canvas.height));
+        function drawLine(d) { ctx.beginPath(); ctx.strokeStyle = "#2F4F4F"; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.moveTo(d.lastX, d.lastY); ctx.lineTo(d.x, d.y); ctx.stroke(); }
+        canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', () => drawing = false);
+        canvas.addEventListener('touchstart', start, {passive:false}); canvas.addEventListener('touchmove', move, {passive:false});
+        socket.on('render_drawing', drawLine);
+        socket.on('clear_canvas', () => ctx.clearRect(0,0,500,500));
 
-        // --- 核心流程 ---
+        // 核心邏輯
         function confirmJoin(game) {
             myName = document.getElementById('nameInp').value; curRoom = document.getElementById('roomInp').value;
             if(!myName || !curRoom) return; myGame = game;
@@ -128,6 +124,7 @@
             socket.emit('join_room', { roomId: curRoom, username: myName, gameType: game });
             if(game === 'bingo') initBingo();
             if(game === 'draw') document.getElementById('draw-ui').classList.remove('hidden');
+            if(game === 'spy') document.getElementById('spy-ui').classList.remove('hidden');
         }
 
         function initBingo() {
@@ -148,148 +145,59 @@
 
         function autoFill() {
             const nums = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
-            nums.forEach((n, i) => {
-                bingoLayout[i] = n; const c = document.getElementById(`cell-${i}`);
-                c.innerText = n; c.classList.add('cell-filled');
-            });
+            nums.forEach((n, i) => { bingoLayout[i] = n; const c = document.getElementById(`cell-${i}`); c.innerText = n; c.classList.add('cell-filled'); });
             fillCount = 26;
         }
 
         socket.on('room_update', (d) => {
             isHost = (socket.id === d.host);
-            document.getElementById('player-list').innerHTML = d.players.map(p => 
-                `<div class="px-4 py-1 bg-white border-2 border-gray-100 rounded-full text-[10px] shadow-sm font-bold">${p.name}${p.id===d.host?' ★':''}</div>`
-            ).join('');
+            document.getElementById('player-list').innerHTML = d.players.map(p => `<div class="px-3 py-1 bg-white border rounded-full text-[10px]">${p.name}</div>`).join('');
             if(isHost && !d.gameStarted) {
                 document.getElementById('startBtn').classList.remove('hidden');
                 if(myGame === 'bingo') document.getElementById('host-bingo-config').classList.remove('hidden');
             }
         });
 
-        function sendStart() {
-            const lines = document.getElementById('win-lines-select')?.value || 3;
-            socket.emit('start_game', { roomId: curRoom, winLines: lines });
-        }
+        function sendStart() { socket.emit('start_game', { roomId: curRoom, winLines: document.getElementById('win-select')?.value || 3 }); }
 
         socket.on('game_begin', (d) => {
             gameStarted = true; winTarget = d.winLines;
             document.getElementById('startBtn').classList.add('hidden');
-            document.getElementById('host-bingo-config').classList.add('hidden');
-            if(myGame === 'bingo') document.getElementById('target-msg').innerText = `連線目標：${winTarget} 條線`;
-            if(myGame === 'draw') {
-                isPainter = (socket.id === d.turnId);
-                document.getElementById('painter-tools').classList.toggle('hidden', !isPainter);
-            }
+            if(myGame === 'draw') { isPainter = (socket.id === d.turnId); document.getElementById('painter-tools').classList.toggle('hidden', !isPainter); }
             updateTurn(d.turnId, d.turnName);
         });
 
         function updateTurn(id, name) {
             isMyTurn = (socket.id === id);
             const tag = document.getElementById('status-tag');
-            tag.innerText = isMyTurn ? "🌟 你的回合" : `等待 ${name}`;
-            tag.className = `px-4 py-1 rounded-full text-[10px] font-bold ${isMyTurn ? 'btn-blue' : 'btn-green'}`;
+            tag.innerText = isMyTurn ? "🌟 你的回合" : `輪到 ${name}`;
+            tag.className = `px-3 py-1 rounded-full ${isMyTurn ? 'btn-blue' : 'btn-green'}`;
         }
-
-        socket.on('next_turn', (d) => updateTurn(d.turnId, d.turnName));
 
         socket.on('bingo_sync', (n) => {
             const idx = bingoLayout.indexOf(n);
             if(idx !== -1) {
-                markedCells[idx] = true;
-                document.getElementById(`cell-${idx}`).classList.add('cell-marked');
-                checkBingoWin();
+                markedCells[idx] = true; document.getElementById(`cell-${idx}`).classList.add('cell-marked');
+                // Bingo 連線算法修復
+                let lines = 0; const m = markedCells;
+                for(let i=0; i<25; i+=5) if(m[i]&&m[i+1]&&m[i+2]&&m[i+3]&&m[i+4]) lines++;
+                for(let i=0; i<5; i++) if(m[i]&&m[i+5]&&m[i+10]&&m[i+15]&&m[i+20]) lines++;
+                if(m[0]&&m[6]&&m[12]&&m[18]&&m[24]) lines++; if(m[4]&&m[8]&&m[12]&&m[16]&&m[20]) lines++;
+                if(lines >= winTarget) socket.emit('bingo_win', { roomId: curRoom, name: myName });
             }
         });
 
-        // --- 核心連線判定算法 ---
-        function checkBingoWin() {
-            let lines = 0;
-            const m = markedCells;
-            // 橫
-            for(let i=0; i<25; i+=5) if(m[i] && m[i+1] && m[i+2] && m[i+3] && m[i+4]) lines++;
-            // 直
-            for(let i=0; i<5; i++) if(m[i] && m[i+5] && m[i+10] && m[i+15] && m[i+20]) lines++;
-            // 斜
-            if(m[0] && m[6] && m[12] && m[18] && m[24]) lines++;
-            if(m[4] && m[8] && m[12] && m[16] && m[20]) lines++;
-
-            if(lines >= winTarget) socket.emit('bingo_win', { roomId: curRoom, name: myName });
+        socket.on('spy_setup', (d) => { mySecret = d.word; document.getElementById('spy-role').innerText = `身分：${d.role}`; });
+        function toggleSpy() { 
+            const el = document.getElementById('spy-word');
+            el.innerText = el.innerText === "點擊翻開" ? mySecret : "點擊翻開";
+            el.className = el.innerText === "點擊翻開" ? "text-xl font-bold text-gray-400" : "text-xl font-bold text-[#2F4F4F]";
         }
 
-        function submitTopic() {
-            const w = document.getElementById('topicInp').value;
-            if(!w) return;
-            socket.emit('set_word', { roomId: curRoom, word: w });
-            document.getElementById('painter-tools').innerHTML = `<div class="p-2 text-xs font-bold text-blue-500">當前題目：${w}</div>`;
-        }
-
-        function sendMessage() {
-            const inp = document.getElementById('chatInp');
-            if(inp.value) { socket.emit('send_chat', { roomId: curRoom, msg: inp.value }); inp.value = ''; }
-        }
-
-        socket.on('chat_msg', (d) => {
-            const b = document.getElementById('chat-box');
-            b.innerHTML += `<div class="mb-1"><span class="font-bold">${d.name}:</span> ${d.msg}</div>`;
-            b.scrollTop = 999;
-        });
-
-        socket.on('game_over', (d) => {
-            document.getElementById('result-overlay').classList.remove('hidden');
-            document.getElementById('result-title').innerText = d.msg;
-            document.getElementById('result-desc').innerText = d.subMsg;
-        });
+        function submitTopic() { socket.emit('set_word', { roomId: curRoom, word: document.getElementById('topicInp').value }); }
+        function sendMessage() { const i = document.getElementById('chatInp'); if(i.value) { socket.emit('send_chat', { roomId: curRoom, msg: i.value }); i.value = ''; } }
+        socket.on('chat_msg', (d) => { const b = document.getElementById('chat-box'); b.innerHTML += `<div><b>${d.name}:</b> ${d.msg}</div>`; b.scrollTop = 999; });
+        socket.on('game_over', (d) => { document.getElementById('result-overlay').classList.remove('hidden'); document.getElementById('result-title').innerText = d.msg; });
     </script>
 </body>
 </html>
-<div id="spy-ui" class="hidden flex flex-col items-center justify-center py-10 space-y-6">
-    <div class="text-xs font-bold opacity-40 tracking-widest uppercase">Your Secret Word</div>
-    
-    <div id="spy-card" onclick="toggleSpyWord()" class="w-48 h-64 bg-gray-100 rounded-[2rem] flex items-center justify-center cursor-pointer shadow-inner border-4 border-dashed border-gray-200 transition-all">
-        <span id="spy-word-display" class="text-2xl font-black text-gray-300">點擊翻開</span>
-    </div>
-
-    <div id="spy-role-tag" class="px-6 py-2 bg-gray-100 rounded-full text-[10px] font-bold tracking-widest">身分確認中...</div>
-    
-    <p class="text-[10px] text-center opacity-50 max-w-[200px]">
-        平民要找出臥底，臥底要生存到最後。描述時請勿直接說出答案！
-    </p>
-</div>
-
-<script>
-    let mySecretWord = "";
-    let wordVisible = false;
-
-    // 接收身分設定
-    socket.on('spy_setup', (d) => {
-        document.getElementById('spy-ui').classList.remove('hidden');
-        mySecretWord = d.word;
-        document.getElementById('spy-role-tag').innerText = `你的身分：${d.role}`;
-        document.getElementById('spy-role-tag').classList.add(d.role === '臥底' ? 'text-red-400' : 'text-blue-400');
-        
-        // 初始化卡片
-        wordVisible = false;
-        document.getElementById('spy-word-display').innerText = "點擊翻開";
-        document.getElementById('spy-card').style.backgroundColor = "#f3f4f6";
-    });
-
-    function toggleSpyWord() {
-        const display = document.getElementById('spy-word-display');
-        const card = document.getElementById('spy-card');
-        
-        if (!wordVisible) {
-            display.innerText = mySecretWord;
-            display.classList.remove('text-gray-300');
-            display.classList.add('text-[#2F4F4F]');
-            card.style.backgroundColor = "#ffffff";
-            card.style.borderColor = "#A3B9C9";
-            wordVisible = true;
-        } else {
-            display.innerText = "點擊翻開";
-            display.classList.add('text-gray-300');
-            card.style.backgroundColor = "#f3f4f6";
-            card.style.borderColor = "#eeeeee";
-            wordVisible = false;
-        }
-    }
-</script>
