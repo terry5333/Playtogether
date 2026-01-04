@@ -6,11 +6,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// 這行很重要：它告訴伺服器去「public」資料夾找 HTML 檔案
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
-const spyWordBank = [{ n: "西瓜", s: "木瓜" }, { n: "泡麵", s: "快煮麵" }, { n: "手機", s: "平板" }];
+const spyWords = [{ n: "西瓜", s: "木瓜" }, { n: "泡麵", s: "快煮麵" }, { n: "手機", s: "平板" }];
 
 io.on('connection', (socket) => {
     socket.on('join_room', (data) => {
@@ -31,9 +30,10 @@ io.on('connection', (socket) => {
         if (!room || room.host !== socket.id) return;
         room.gameStarted = true;
         room.turnIdx = 0;
+        room.votes = {};
 
         if (room.gameType === 'spy') {
-            const pair = spyWordBank[Math.floor(Math.random() * spyWordBank.length)];
+            const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
             const spyIdx = Math.floor(Math.random() * room.players.length);
             room.players.forEach((p, i) => {
                 io.to(p.id).emit('spy_setup', { word: (i === spyIdx ? pair.s : pair.n), role: (i === spyIdx ? "臥底" : "平民") });
@@ -49,31 +49,42 @@ io.on('connection', (socket) => {
                 }
             }, 1000);
         }
-        io.to(data.roomId).emit('game_begin', { turnId: room.players[0].id, turnName: room.players[0].name, gameType: room.gameType });
+        
+        // 發送開始指令與第一回合玩家
+        io.to(data.roomId).emit('game_begin', { 
+            turnId: room.players[0].id, 
+            turnName: room.players[0].name,
+            gameType: room.gameType 
+        });
     });
 
-    socket.on('set_word', (data) => { if (rooms[data.roomId]) { rooms[data.roomId].currentAnswer = data.word.trim(); io.to(data.roomId).emit('topic_locked'); } });
+    // Bingo 輪流核心邏輯
     socket.on('bingo_click', (data) => {
         const room = rooms[data.roomId];
-        if (room) {
+        if (room && room.gameStarted) {
             io.to(data.roomId).emit('bingo_sync', data.num);
             room.turnIdx = (room.turnIdx + 1) % room.players.length;
-            io.to(data.roomId).emit('next_turn', { turnId: room.players[room.turnIdx].id, turnName: room.players[room.turnIdx].name });
+            const nextP = room.players[room.turnIdx];
+            io.to(data.roomId).emit('next_turn', { turnId: nextP.id, turnName: nextP.name });
         }
     });
+
+    socket.on('set_word', (data) => {
+        const room = rooms[data.roomId];
+        if (room) {
+            room.currentAnswer = data.word.trim();
+            io.to(data.roomId).emit('topic_locked', { painter: socket.username });
+        }
+    });
+
+    socket.on('drawing', (d) => socket.to(d.roomId).emit('render_drawing', d));
     socket.on('cast_vote', (data) => {
         const room = rooms[data.roomId];
-        if (room) { room.votes[data.targetId] = (room.votes[data.targetId] || 0) + 1; io.to(data.roomId).emit('vote_update', room.votes); }
-    });
-    socket.on('drawing', (d) => socket.to(d.roomId).emit('render_drawing', d));
-    socket.on('disconnect', () => {
-        if (socket.roomId && rooms[socket.roomId]) {
-            rooms[socket.roomId].players = rooms[socket.roomId].players.filter(p => p.id !== socket.id);
-            if (rooms[socket.roomId].players.length === 0) delete rooms[socket.roomId];
-            else io.to(socket.roomId).emit('room_update', rooms[socket.roomId]);
+        if (room) {
+            room.votes[data.targetId] = (room.votes[data.targetId] || 0) + 1;
+            io.to(data.roomId).emit('vote_update', room.votes);
         }
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`伺服器運行在 http://localhost:${PORT}`));
+server.listen(3000, '0.0.0.0', () => console.log("Server running on port 3000"));
