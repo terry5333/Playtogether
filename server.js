@@ -11,9 +11,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
 
+// 誰是臥底的題庫
+const spyWords = [
+    ["蘋果", "水梨"], ["電腦", "筆電"], ["跑步", "競走"], 
+    ["泡麵", "拉麵"], ["手錶", "鬧鐘"], ["醫生", "護士"]
+];
+
 io.on('connection', (socket) => {
     socket.on('join_room', (data) => {
-        const { roomId, username, maxPlayers, winLines } = data;
+        const { roomId, username, gameType, maxPlayers, winLines } = data;
         const rId = roomId.trim();
         socket.join(rId);
         socket.username = username;
@@ -21,13 +27,15 @@ io.on('connection', (socket) => {
 
         if (!rooms[rId]) {
             rooms[rId] = {
+                gameType: gameType, // 'bingo' 或 'spy'
                 host: socket.id,
                 maxPlayers: parseInt(maxPlayers) || 2,
                 winLines: parseInt(winLines) || 3,
                 players: [],
                 turnIndex: 0,
                 isFinished: false,
-                gameStarted: false
+                gameStarted: false,
+                spyWordPair: []
             };
         }
 
@@ -35,6 +43,7 @@ io.on('connection', (socket) => {
         room.players.push({ id: socket.id, name: username });
 
         io.to(rId).emit('room_update', {
+            gameType: room.gameType,
             host: room.host,
             players: room.players,
             maxPlayers: room.maxPlayers,
@@ -43,17 +52,31 @@ io.on('connection', (socket) => {
         });
     });
 
+    // 開始遊戲邏輯 (相容 Bingo 與 誰是臥底)
     socket.on('start_game', (roomId) => {
         const room = rooms[roomId];
-        if (room && room.host === socket.id) {
-            room.gameStarted = true;
+        if (!room || room.host !== socket.id) return;
+        
+        room.gameStarted = true;
+
+        if (room.gameType === 'bingo') {
             io.to(roomId).emit('game_begin', { 
                 nextTurnId: room.players[room.turnIndex].id,
                 nextTurnName: room.players[room.turnIndex].name
             });
+        } else if (room.gameType === 'spy') {
+            // 誰是臥底：隨機挑選詞語與臥底
+            const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
+            const spyIdx = Math.floor(Math.random() * room.players.length);
+            room.players.forEach((p, idx) => {
+                const word = (idx === spyIdx) ? pair[1] : pair[0];
+                io.to(p.id).emit('receive_spy_word', { word: word });
+            });
+            io.to(roomId).emit('spy_game_begin');
         }
     });
 
+    // Bingo 喊號邏輯
     socket.on('game_move', (data) => {
         const room = rooms[data.roomId];
         if (room && room.gameStarted && !room.isFinished) {
@@ -85,11 +108,11 @@ io.on('connection', (socket) => {
             if (rooms[rId].players.length === 0) delete rooms[rId];
             else {
                 if (rooms[rId].host === socket.id) rooms[rId].host = rooms[rId].players[0].id;
-                io.to(rId).emit('room_update', { host: rooms[rId].host, players: rooms[rId].players });
+                io.to(rId).emit('room_update', rooms[rId]);
             }
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`Server on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
