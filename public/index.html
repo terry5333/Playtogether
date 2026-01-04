@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PlayTogether 萬能遊戲盒</title>
+    <title>PlayTogether - 輪流喊號版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #F2F0EB; color: #5F6368; font-family: sans-serif; touch-action: manipulation; }
-        .morandi-card { background: white; border-radius: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #f0f0f0; }
+        body { background-color: #F2F0EB; color: #5F6368; touch-action: manipulation; }
+        .morandi-card { background: white; border-radius: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
         .btn-blue { background-color: #A3B9C9; color: white; }
         .cell-active { background-color: #A3B9C9 !important; color: white !important; }
         .cell-marked { background-color: #E2B4B4 !important; color: white !important; border: none; }
-        #canvas { background: white; touch-action: none; border-radius: 1rem; width: 100%; height: 320px; border: 1px solid #eee; }
+        .my-turn { border: 2px solid #A3B9C9; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
         .hidden { display: none !important; }
     </style>
 </head>
@@ -20,27 +21,26 @@
     <div class="w-full max-w-md morandi-card p-6 mt-4">
         
         <div id="step-0" class="space-y-4 text-center">
-            <h1 class="text-xl font-light tracking-widest text-gray-300 mb-8">GAME CENTER</h1>
-            <button onclick="selectGame('bingo')" class="w-full p-5 border rounded-3xl border-blue-100 bg-blue-50/20 text-blue-400 font-bold">🔢 經典 BINGO</button>
+            <h1 class="text-xl font-light text-gray-300 mb-6 tracking-widest uppercase">Bingo Box</h1>
+            <button onclick="selectGame('bingo')" class="w-full p-5 border rounded-3xl border-blue-100 bg-blue-50/20 text-blue-400 font-bold">🔢 輪流 BINGO</button>
             <button onclick="selectGame('spy')" class="w-full p-5 border rounded-3xl border-green-100 bg-green-50/20 text-green-400 font-bold">🕵️ 誰是臥底</button>
-            <button onclick="selectGame('draw')" class="w-full p-5 border rounded-3xl border-orange-100 bg-orange-50/20 text-orange-400 font-bold">🎨 你畫我猜</button>
         </div>
 
-        <div id="step-lobby" class="hidden space-y-4 text-center">
-            <h2 id="mode-text" class="text-xs font-bold text-gray-300 uppercase"></h2>
+        <div id="step-lobby" class="hidden space-y-4">
             <input type="text" id="nameInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none" placeholder="暱稱">
             <input type="text" id="roomIdInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none" placeholder="房號">
             <button onclick="join()" class="w-full btn-blue py-4 rounded-2xl font-bold">進入房間</button>
-            <p onclick="location.reload()" class="text-[10px] text-gray-300 cursor-pointer">← 返回菜單</p>
         </div>
 
         <div id="step-game" class="hidden space-y-4">
+            <div id="turn-display" class="hidden text-center p-2 bg-blue-50 text-blue-400 text-xs font-bold rounded-xl mb-2"></div>
+            
             <div id="player-list" class="flex gap-2 overflow-x-auto pb-2 border-b border-gray-50 min-h-[40px]"></div>
             
             <div id="bingo-ui" class="hidden space-y-4">
-                <div id="bingo-settings" class="hidden bg-blue-50/30 p-4 rounded-2xl flex justify-between items-center text-xs">
-                    <span>設定線數：</span>
-                    <select id="winLinesSelect" class="bg-white border rounded p-1 outline-none">
+                <div id="bingo-settings" class="hidden flex justify-between items-center text-xs p-2">
+                    <span>勝利連線數：</span>
+                    <select id="winLinesSelect" class="border rounded p-1">
                         <option value="1">1 條線</option><option value="3" selected>3 條線</option><option value="5">5 條線</option>
                     </select>
                 </div>
@@ -50,16 +50,6 @@
                     <span id="targetLinesText">目標: -</span>
                 </div>
             </div>
-
-            <div id="spy-ui" class="hidden text-center py-10 space-y-4">
-                <div class="bg-gray-50 p-10 rounded-[2.5rem] border-2 border-dashed border-gray-100">
-                    <p class="text-[10px] text-gray-400 mb-2 uppercase">Your Word</p>
-                    <h2 id="spy-word-display" class="text-3xl font-bold text-slate-500">????</h2>
-                </div>
-                <p class="text-[10px] text-red-300 font-bold" id="spy-role-hint"></p>
-            </div>
-
-            <div id="draw-ui" class="hidden space-y-4"><canvas id="canvas" width="400" height="400"></canvas></div>
 
             <div id="chat-box" class="h-24 overflow-y-auto bg-gray-50 rounded-xl p-3 text-[10px] border"></div>
             <div class="flex gap-2">
@@ -74,19 +64,17 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let selectedGame = '', curRoom, myName, isHost = false, gameStarted = false;
+        let selectedGame = '', curRoom, myName, isHost = false, isMyTurn = false;
         let bingoLayout = Array(25).fill(null), fillCount = 1, markedCells = Array(25).fill(false), winTarget = 3;
-        const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 
-        function selectGame(g) { selectedGame = g; document.getElementById('step-0').classList.add('hidden'); document.getElementById('step-lobby').classList.remove('hidden'); document.getElementById('mode-text').innerText = `Mode: ${g}`; }
+        function selectGame(g) { selectedGame = g; document.getElementById('step-0').classList.add('hidden'); document.getElementById('step-lobby').classList.remove('hidden'); }
+        
         function join() {
             myName = document.getElementById('nameInp').value; curRoom = document.getElementById('roomIdInp').value;
-            if(!myName || !curRoom) return alert("資訊不完整");
+            if(!myName || !curRoom) return alert("請填寫資訊");
             socket.emit('join_room', { roomId: curRoom, username: myName, gameType: selectedGame });
             document.getElementById('step-lobby').classList.add('hidden'); document.getElementById('step-game').classList.remove('hidden');
             if(selectedGame === 'bingo') initBingo();
-            if(selectedGame === 'spy') document.getElementById('spy-ui').classList.remove('hidden');
-            if(selectedGame === 'draw') document.getElementById('draw-ui').classList.remove('hidden');
         }
 
         function initBingo() {
@@ -94,60 +82,77 @@
             const grid = document.getElementById('bingo-grid'); grid.innerHTML = '';
             for(let i=0; i<25; i++) {
                 const b = document.createElement('button');
-                b.className = "aspect-square bg-gray-50 rounded-lg text-xs font-bold text-gray-300 border border-gray-100";
+                b.className = "aspect-square bg-gray-50 rounded-lg text-xs font-bold text-gray-300 border border-gray-100 flex items-center justify-center";
                 b.id = `cell-${i}`;
                 b.onclick = () => {
                     if (fillCount <= 25 && !bingoLayout[i]) {
                         bingoLayout[i] = fillCount; b.innerText = fillCount; b.classList.add('cell-active'); fillCount++;
-                    } else if (gameStarted) socket.emit('bingo_click', { roomId: curRoom, num: bingoLayout[i] });
+                    } else if (isMyTurn) {
+                        socket.emit('bingo_click', { roomId: curRoom, num: bingoLayout[i] });
+                    } else {
+                        alert("還沒輪到你！");
+                    }
                 };
                 grid.appendChild(b);
             }
         }
 
-        socket.on('bingo_sync', (num) => {
-            const idx = bingoLayout.indexOf(num);
-            if (idx !== -1) { markedCells[idx] = true; document.getElementById(`cell-${idx}`).classList.add('cell-marked'); checkBingo(); }
+        socket.on('game_begin', (d) => {
+            winTarget = d.winLines;
+            updateTurn(d.turnId, d.turnName);
+            document.getElementById('targetLinesText').innerText = `目標: ${winTarget} 條`;
+            document.getElementById('startBtn').classList.add('hidden');
+            document.getElementById('bingo-settings').classList.add('hidden');
+            document.getElementById('turn-display').classList.remove('hidden');
+            alert("遊戲開始！輪流喊號囉！");
         });
 
-        function checkBingo() {
-            let lines = 0;
-            const c = (idx) => idx.every(i => markedCells[i]);
-            for(let i=0; i<5; i++) { if(c([i*5,i*5+1,i*5+2,i*5+3,i*5+4])) lines++; if(c([i,i+5,i+10,i+15,i+20])) lines++; }
-            if(c([0,6,12,18,24])) lines++; if(c([4,8,12,16,20])) lines++;
-            document.getElementById('curLinesText').innerText = `連線: ${lines}`;
-            if (lines >= winTarget && gameStarted) socket.emit('bingo_win', { roomId: curRoom, name: myName, lines });
+        socket.on('next_turn', (d) => updateTurn(d.turnId, d.turnName));
+
+        function updateTurn(id, name) {
+            isMyTurn = (socket.id === id);
+            const display = document.getElementById('turn-display');
+            display.innerText = isMyTurn ? "🌟 現在是你的回合，請選數字！" : `等待 ${name} 喊號...`;
+            display.className = isMyTurn ? "text-center p-2 bg-orange-50 text-orange-400 text-xs font-bold rounded-xl mb-2 my-turn" : "text-center p-2 bg-blue-50 text-blue-400 text-xs font-bold rounded-xl mb-2";
         }
 
-        socket.on('receive_spy_word', (d) => {
-            document.getElementById('spy-word-display').innerText = d.word;
-            document.getElementById('spy-role-hint').innerText = `(你是${d.role})`;
+        socket.on('bingo_sync', (num) => {
+            const idx = bingoLayout.indexOf(num);
+            if (idx !== -1) {
+                markedCells[idx] = true;
+                document.getElementById(`cell-${idx}`).classList.add('cell-marked');
+                checkWin();
+            }
         });
+
+        function checkWin() {
+            let lines = 0;
+            const c = (indices) => indices.every(i => markedCells[i]);
+            for(let i=0; i<5; i++) {
+                if(c([i*5, i*5+1, i*5+2, i*5+3, i*5+4])) lines++;
+                if(c([i, i+5, i+10, i+15, i+20])) lines++;
+            }
+            if(c([0, 6, 12, 18, 24])) lines++;
+            if(c([4, 8, 12, 16, 20])) lines++;
+            document.getElementById('curLinesText').innerText = `連線: ${lines}`;
+            if (lines >= winTarget) socket.emit('bingo_win', { roomId: curRoom, name: myName });
+        }
 
         socket.on('room_update', (d) => {
             isHost = (socket.id === d.host);
             document.getElementById('player-list').innerHTML = d.players.map(p => `<div class="px-3 py-1 bg-gray-50 rounded-full text-[10px] border">${p.name}${p.id === d.host ? ' ★' : ''}</div>`).join('');
             if (isHost && !d.gameStarted) {
                 document.getElementById('startBtn').classList.remove('hidden');
-                if(selectedGame === 'bingo') document.getElementById('bingo-settings').classList.remove('hidden');
+                document.getElementById('bingo-settings').classList.remove('hidden');
             }
         });
 
         function sendStart() {
-            const winLines = selectedGame === 'bingo' ? document.getElementById('winLinesSelect').value : 3;
-            if (selectedGame === 'bingo' && fillCount <= 25) return alert("填滿格子再開始");
-            socket.emit('start_game', { roomId: curRoom, winLines });
+            if (fillCount <= 25) return alert("填滿格子再開始");
+            socket.emit('start_game', { roomId: curRoom, winLines: document.getElementById('winLinesSelect').value });
         }
 
-        socket.on('game_begin', (d) => {
-            gameStarted = true; winTarget = d.winLines || 3;
-            document.getElementById('targetLinesText').innerText = `目標: ${winTarget} 條`;
-            document.getElementById('startBtn').classList.add('hidden');
-            document.getElementById('bingo-settings').classList.add('hidden');
-            alert("遊戲開始！");
-        });
-
-        socket.on('round_over', (d) => { alert(`🎉 ${d.winner} 獲勝！\n${d.msg || ''}`); location.reload(); });
+        socket.on('round_over', (d) => { alert(`🎉 ${d.winner} 達標獲勝！`); location.reload(); });
         function sendMessage() { socket.emit('send_chat', { roomId: curRoom, msg: document.getElementById('chatInp').value }); document.getElementById('chatInp').value = ''; }
         socket.on('chat_msg', (d) => { document.getElementById('chat-box').innerHTML += `<div><b>${d.name}:</b> ${d.msg}</div>`; });
     </script>
