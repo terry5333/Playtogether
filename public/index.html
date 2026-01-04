@@ -3,93 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PlayTogether - Premium Bingo</title>
+    <title>PlayTogether - 自定義 Bingo</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .cell-active { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        .marked { background-color: #3b82f6 !important; color: white; border-color: #2563eb; transform: scale(0.95); }
+        .cell-fill { transition: all 0.2s; }
+        .cell-fill.active { border-color: #3b82f6; background-color: #eff6ff; }
+        .marked { background-color: #3b82f6 !important; color: white; transform: scale(0.95); }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+<body class="bg-slate-50 min-h-screen font-sans">
     <div class="max-w-md mx-auto px-4 py-8">
-        <header class="text-center mb-8">
-            <h1 class="text-4xl font-extrabold text-blue-600 tracking-tight">BINGO!</h1>
-            <p class="text-slate-500 mt-2">與好友即時連線對戰</p>
-        </header>
+        <div id="name-panel" class="bg-white rounded-2xl shadow-xl p-6 text-center">
+            <h2 class="text-2xl font-bold mb-4">歡迎來到 Bingo!</h2>
+            <input type="text" id="usernameInput" class="w-full p-3 border rounded-xl mb-4" placeholder="輸入你的大名">
+            <button onclick="showLobby()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">下一步</button>
+        </div>
 
-        <div id="setup-panel" class="bg-white rounded-2xl shadow-xl p-6 mb-6">
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-slate-700">房間代碼</label>
-                    <input type="text" id="roomInput" class="w-full mt-1 p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="輸入自訂代碼">
+        <div id="lobby-panel" class="hidden space-y-4">
+            <div class="bg-white p-6 rounded-2xl shadow-md border-t-4 border-blue-500">
+                <h3 class="font-bold mb-4 text-blue-600">創建房間</h3>
+                <input type="text" id="createRoomId" placeholder="房間代碼" class="w-full p-2 border rounded-lg mb-2">
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <input type="number" id="winLines" value="3" placeholder="勝利線數" class="p-2 border rounded-lg text-sm">
+                    <button onclick="handleJoin(true)" class="bg-blue-500 text-white rounded-lg font-bold">創建</button>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700">人數上限</label>
-                        <input type="number" id="maxPlayers" value="2" class="w-full mt-1 p-3 border rounded-xl">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700">勝利連線數</label>
-                        <input type="number" id="winLines" value="5" class="w-full mt-1 p-3 border rounded-xl">
-                    </div>
-                </div>
-                <button onclick="joinRoom()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-200">
-                    建立 / 加入房間
-                </button>
+            </div>
+            <div class="bg-white p-6 rounded-2xl shadow-md border-t-4 border-emerald-500">
+                <h3 class="font-bold mb-4 text-emerald-600">加入房間</h3>
+                <input type="text" id="joinRoomId" placeholder="輸入房間代碼" class="w-full p-2 border rounded-lg mb-2">
+                <button onclick="handleJoin(false)" class="w-full bg-emerald-500 text-white py-2 rounded-lg font-bold">進入</button>
             </div>
         </div>
 
-        <div id="game-panel" class="hidden">
-            <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm mb-4">
-                <div class="text-sm font-semibold">房間: <span id="display-room" class="text-blue-600">--</span></div>
-                <div id="line-badge" class="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm font-bold">連線: 0 / 5</div>
+        <div id="fill-panel" class="hidden">
+            <div class="bg-blue-50 p-4 rounded-xl mb-4 text-center">
+                <p class="font-bold text-blue-700">請依序填入 1~25</p>
+                <p class="text-xs text-blue-500">點擊空格填入下一個數字</p>
             </div>
-            
-            <div id="bingoGrid" class="grid grid-cols-5 gap-2 bg-white p-4 rounded-2xl shadow-xl border-4 border-white">
-                </div>
-            
-            <p id="player-status" class="text-center text-slate-400 text-sm mt-4">等待對手加入...</p>
+            <div id="fillGrid" class="grid grid-cols-5 gap-2 bg-white p-4 rounded-2xl shadow-xl"></div>
+            <button id="startBtn" onclick="startGame()" class="w-full mt-4 bg-slate-400 text-white py-3 rounded-xl font-bold cursor-not-allowed" disabled>請先填滿數字</button>
+        </div>
+
+        <div id="game-panel" class="hidden text-center">
+            <div class="bg-white p-3 rounded-xl mb-4 shadow-sm flex justify-between items-center text-sm">
+                <span id="display-name" class="font-bold text-blue-600"></span>
+                <span id="line-badge" class="bg-red-500 text-white px-2 py-1 rounded-md font-bold">0 / 5 線</span>
+            </div>
+            <div id="gameGrid" class="grid grid-cols-5 gap-2 bg-white p-4 rounded-2xl shadow-xl"></div>
+            <p id="system-msg" class="mt-4 text-slate-500 text-sm italic"></p>
         </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let currentRoom = "";
+        let myName = "", currentRoom = "", targetLines = 5;
+        let fillCount = 1;
+        let myLayout = Array(25).fill(null);
         let boardState = Array(25).fill(false);
-        let numberToIdx = {};
-        let targetLines = 5;
+        let numToIdx = {};
 
-        function joinRoom() {
-            const roomId = document.getElementById('roomInput').value;
-            const maxPlayers = document.getElementById('maxPlayers').value;
-            const winLines = document.getElementById('winLines').value;
-            
-            if (!roomId) return alert("請輸入房間號碼");
-            
-            targetLines = parseInt(winLines);
-            socket.emit('join_room', { roomId, maxPlayers, winLines });
-            
-            document.getElementById('setup-panel').classList.add('hidden');
-            document.getElementById('game-panel').classList.remove('hidden');
-            document.getElementById('display-room').innerText = roomId;
-            document.getElementById('line-badge').innerText = `連線: 0 / ${targetLines}`;
-            
-            generateBingo();
+        function showLobby() {
+            myName = document.getElementById('usernameInput').value;
+            if (!myName) return alert("請輸入姓名");
+            document.getElementById('name-panel').classList.add('hidden');
+            document.getElementById('lobby-panel').classList.remove('hidden');
         }
 
-        function generateBingo() {
-            const nums = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
-            const grid = document.getElementById('bingoGrid');
-            grid.innerHTML = '';
-            nums.forEach((num, idx) => {
-                numberToIdx[num] = idx;
+        function handleJoin(isCreator) {
+            const rid = isCreator ? document.getElementById('createRoomId').value : document.getElementById('joinRoomId').value;
+            if (!rid) return alert("請輸入房號");
+            currentRoom = rid;
+            if (isCreator) targetLines = parseInt(document.getElementById('winLines').value);
+            
+            socket.emit('join_room', { roomId: rid, username: myName, winLines: targetLines });
+            
+            document.getElementById('lobby-panel').classList.add('hidden');
+            initFillGrid();
+        }
+
+        function initFillGrid() {
+            document.getElementById('fill-panel').classList.remove('hidden');
+            const grid = document.getElementById('fillGrid');
+            for (let i = 0; i < 25; i++) {
                 const btn = document.createElement('button');
-                btn.className = "cell aspect-square bg-slate-100 rounded-lg text-xl font-bold hover:bg-slate-200 transition-all border-b-4 border-slate-300 active:border-b-0 cell-active";
+                btn.className = "cell-fill aspect-square border-2 border-dashed rounded-lg text-lg font-bold text-slate-300";
+                btn.onclick = () => fillCell(i, btn);
+                grid.appendChild(btn);
+            }
+        }
+
+        function fillCell(idx, btn) {
+            if (myLayout[idx] !== null) return;
+            myLayout[idx] = fillCount;
+            numToIdx[fillCount] = idx;
+            btn.innerText = fillCount;
+            btn.className = "aspect-square border-2 border-blue-500 bg-blue-50 text-blue-600 rounded-lg text-lg font-bold";
+            fillCount++;
+            if (fillCount > 25) {
+                const sBtn = document.getElementById('startBtn');
+                sBtn.disabled = false;
+                sBtn.className = "w-full mt-4 bg-blue-600 text-white py-3 rounded-xl font-bold transition-all hover:bg-blue-700 shadow-lg";
+            }
+        }
+
+        function startGame() {
+            document.getElementById('fill-panel').classList.add('hidden');
+            document.getElementById('game-panel').classList.remove('hidden');
+            document.getElementById('display-name').innerText = `玩家: ${myName}`;
+            
+            const grid = document.getElementById('gameGrid');
+            myLayout.forEach((num, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "aspect-square bg-slate-100 rounded-lg text-lg font-bold border-b-4 border-slate-300 active:border-b-0";
                 btn.innerText = num;
-                btn.id = `idx-${idx}`;
+                btn.id = `game-idx-${idx}`;
                 btn.onclick = () => {
-                    socket.emit('game_move', { roomId: document.getElementById('roomInput').value, number: num });
+                    socket.emit('game_move', { roomId: currentRoom, number: num });
                     markNumber(num);
                 };
                 grid.appendChild(btn);
@@ -97,10 +127,10 @@
         }
 
         function markNumber(num) {
-            const idx = numberToIdx[num];
+            const idx = numToIdx[num];
             if (idx !== undefined && !boardState[idx]) {
                 boardState[idx] = true;
-                const el = document.getElementById(`idx-${idx}`);
+                const el = document.getElementById(`game-idx-${idx}`);
                 el.classList.add('marked');
                 el.disabled = true;
                 checkWin();
@@ -110,23 +140,22 @@
         function checkWin() {
             let lines = 0;
             for (let i = 0; i < 5; i++) {
-                if ([0,1,2,3,4].every(j => boardState[i*5 + j])) lines++; // 橫
-                if ([0,1,2,3,4].every(j => boardState[j*5 + i])) lines++; // 豎
+                if ([0,1,2,3,4].every(j => boardState[i*5 + j])) lines++;
+                if ([0,1,2,3,4].every(j => boardState[j*5 + i])) lines++;
             }
             if ([0,6,12,18,24].every(i => boardState[i])) lines++;
             if ([4,8,12,16,20].every(i => boardState[i])) lines++;
 
-            document.getElementById('line-badge').innerText = `連線: ${lines} / ${targetLines}`;
-            if (lines >= targetLines) alert("🎉 BINGO! 你贏了！");
+            document.getElementById('line-badge').innerText = `${lines} / ${targetLines} 線`;
+            if (lines >= targetLines) {
+                alert(`🎊 BINGO! ${myName} 獲勝！`);
+            }
         }
 
-        socket.on('room_update', (data) => {
-            document.getElementById('player-status').innerText = `目前人數: ${data.currentPlayers} / ${data.maxPlayers}`;
-            targetLines = data.winLines;
-            document.getElementById('line-badge').innerText = `連線: 0 / ${targetLines}`;
+        socket.on('receive_move', (data) => {
+            markNumber(data.number);
+            document.getElementById('system-msg').innerText = `${data.senderName} 喊了 ${data.number}`;
         });
-
-        socket.on('receive_move', (data) => markNumber(data.number));
     </script>
 </body>
 </html>
