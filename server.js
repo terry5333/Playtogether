@@ -8,32 +8,49 @@ const io = new Server(server);
 app.use(express.static('public'));
 
 const rooms = {};
-const spyWords = [{n:"泡麵", s:"快煮麵"}, {n:"西瓜", s:"木瓜"}, {n:"炸雞", s:"烤雞"}];
 
 io.on('connection', (socket) => {
     socket.on('join_room', (data) => {
         const { roomId, username, gameType } = data;
         socket.join(roomId);
         socket.username = username;
-        if (!rooms[roomId]) rooms[roomId] = { gameType, host: socket.id, players: [], gameStarted: false, turnIdx: 0 };
+        if (!rooms[roomId]) rooms[roomId] = { gameType, host: socket.id, players: [], gameStarted: false, turnIdx: 0, currentAnswer: "" };
         rooms[roomId].players.push({ id: socket.id, name: username });
         io.to(roomId).emit('room_update', rooms[roomId]);
     });
 
     socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
-        if (!room || room.host !== socket.id) return;
+        if (!room) return;
         room.gameStarted = true;
-        room.winLines = data.winLines || 3;
-        
-        if (room.gameType === 'spy') {
-            const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
-            const spyIdx = Math.floor(Math.random() * room.players.length);
-            room.players.forEach((p, i) => {
-                io.to(p.id).emit('receive_spy_word', { word: (i === spyIdx ? pair.s : pair.n), role: (i === spyIdx ? '臥底' : '平民') });
-            });
+        // 分配第一個畫家
+        const painter = room.players[0];
+        io.to(data.roomId).emit('game_begin', { 
+            turnId: painter.id, 
+            turnName: painter.name, 
+            winLines: data.winLines || 3 
+        });
+    });
+
+    // 關鍵：轉發繪圖數據給房間內所有人
+    socket.on('drawing', (data) => {
+        socket.to(data.roomId).emit('render_drawing', data);
+    });
+
+    socket.on('set_word', (data) => {
+        if(rooms[data.roomId]) {
+            rooms[data.roomId].currentAnswer = data.word;
+            io.to(data.roomId).emit('chat_msg', { name: "系統", msg: "畫家已出題，大家快猜！" });
         }
-        io.to(data.roomId).emit('game_begin', { turnId: room.players[0].id, turnName: room.players[0].name, winLines: room.winLines });
+    });
+
+    socket.on('send_chat', (data) => {
+        const room = rooms[data.roomId];
+        if (room && room.gameStarted && room.gameType === 'draw' && data.msg === room.currentAnswer) {
+            io.to(data.roomId).emit('game_over', { msg: `猜對了！答案是 [${room.currentAnswer}]`, subMsg: `${socket.username} 獲得勝利！` });
+        } else {
+            io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg });
+        }
     });
 
     socket.on('bingo_click', (data) => {
@@ -45,9 +62,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('drawing', (data) => socket.to(data.roomId).emit('render_drawing', data));
-    socket.on('send_chat', (data) => io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg }));
-    socket.on('bingo_win', (data) => io.to(data.roomId).emit('game_over', { msg: `${data.name} 贏了！`, subMsg: "BINGO!" }));
+    socket.on('bingo_win', (data) => io.to(data.roomId).emit('game_over', { msg: `${data.name} BINGO!`, subMsg: "遊戲結束" }));
 });
 
-server.listen(3000, '0.0.0.0', () => console.log('Server running on port 3000'));
+server.listen(3000, '0.0.0.0');
