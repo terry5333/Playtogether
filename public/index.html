@@ -2,45 +2,54 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PlayTogether - Bingo</title>
+    <title>PlayTogether - Bingo 完整版</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f4f7f6; }
-        .grid { display: grid; grid-template-columns: repeat(5, 60px); gap: 8px; justify-content: center; margin-top: 20px; }
-        .cell { width: 60px; height: 60px; background: white; border: 2px solid #333; 
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #f0f4f8; color: #333; }
+        .container { max-width: 400px; margin: 0 auto; padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 20px; }
+        .cell { aspect-ratio: 1; background: white; border: 2px solid #cbd5e0; 
                 display: flex; align-items: center; justify-content: center; 
-                font-weight: bold; cursor: pointer; border-radius: 5px; }
-        .cell.marked { background: #ff4757; color: white; border-color: #ff4757; }
-        .status-box { margin: 20px; padding: 10px; background: #dfe4ea; border-radius: 8px; display: inline-block; }
+                font-size: 1.2rem; font-weight: bold; cursor: pointer; border-radius: 8px; transition: 0.2s; }
+        .cell:hover { background: #edf2f7; transform: scale(1.05); }
+        .cell.marked { background: #4299e1; color: white; border-color: #3182ce; }
+        .status-box { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 60%; }
+        button { padding: 8px 16px; background: #48bb78; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        #lineCount { font-size: 1.5rem; color: #e53e3e; margin: 10px 0; }
     </style>
 </head>
 <body>
-    <h1>大家來 Bingo！</h1>
-    <div class="status-box">
-        <input type="text" id="roomInput" placeholder="房間號碼">
-        <button onclick="joinRoom()">進入房間</button>
-        <p id="status">請先加入房間</p>
-    </div>
+    <div class="container">
+        <h1>Bingo 連線對戰</h1>
+        <div class="status-box">
+            <input type="text" id="roomInput" placeholder="輸入房間號碼">
+            <button onclick="joinRoom()">加入</button>
+            <p id="status">請先加入房間</p>
+            <div id="lineCount">連線數: 0</div>
+        </div>
 
-    <div class="grid" id="bingoGrid"></div>
+        <div class="grid" id="bingoGrid"></div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         let currentRoom = "";
-        let myNumbers = [];
+        let boardState = Array(25).fill(false); // 追蹤哪一格被點了
+        let numberToIdx = {}; // 快速對照：數字 -> 陣列索引
 
-        // 1. 生成 1-25 隨機洗牌數字
         function generateBingo() {
             const nums = Array.from({length: 25}, (_, i) => i + 1);
             nums.sort(() => Math.random() - 0.5);
             const grid = document.getElementById('bingoGrid');
             grid.innerHTML = '';
             
-            nums.forEach(num => {
+            nums.forEach((num, idx) => {
+                numberToIdx[num] = idx; // 記錄這個數字在第幾格
                 const div = document.createElement('div');
                 div.className = 'cell';
                 div.innerText = num;
-                div.id = `num-${num}`;
+                div.id = `idx-${idx}`;
                 div.onclick = () => pickNumber(num);
                 grid.appendChild(div);
             });
@@ -50,33 +59,48 @@
             currentRoom = document.getElementById('roomInput').value;
             if (currentRoom) {
                 socket.emit('join_room', currentRoom);
-                document.getElementById('status').innerText = `已加入房間：${currentRoom}`;
+                document.getElementById('status').innerText = `房間：${currentRoom}`;
                 generateBingo();
             }
         }
 
-        // 2. 點選數字
         function pickNumber(num) {
             if (!currentRoom) return;
-            // 標記自己畫面的數字
-            markNumber(num);
-            // 告訴對手也要標記這個數字
             socket.emit('game_move', { roomId: currentRoom, number: num });
+            markNumber(num);
         }
 
-        // 3. 標記數字的視覺效果
         function markNumber(num) {
-            const cell = document.getElementById(`num-${num}`);
-            if (cell && !cell.classList.contains('marked')) {
-                cell.classList.add('marked');
+            const idx = numberToIdx[num];
+            if (idx !== undefined && !boardState[idx]) {
+                boardState[idx] = true;
+                document.getElementById(`idx-${idx}`).classList.add('marked');
+                checkWin();
             }
         }
 
-        // 4. 接收對手點選的數字
-        socket.on('receive_move', (data) => {
-            if (data.number) {
-                markNumber(data.number);
+        function checkWin() {
+            let lines = 0;
+            // 橫線
+            for (let i = 0; i < 5; i++) {
+                if ([0,1,2,3,4].every(j => boardState[i*5 + j])) lines++;
             }
+            // 豎線
+            for (let i = 0; i < 5; i++) {
+                if ([0,1,2,3,4].every(j => boardState[j*5 + i])) lines++;
+            }
+            // 斜線
+            if ([0,6,12,18,24].every(i => boardState[i])) lines++;
+            if ([4,8,12,16,20].every(i => boardState[i])) lines++;
+
+            document.getElementById('lineCount').innerText = `連線數: ${lines}`;
+            if (lines >= 5) {
+                alert("BINGO! 你贏了！");
+            }
+        }
+
+        socket.on('receive_move', (data) => {
+            if (data.number) markNumber(data.number);
         });
     </script>
 </body>
