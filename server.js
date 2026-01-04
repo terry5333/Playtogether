@@ -10,6 +10,7 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
+const spyWords = [{n: "珍珠奶茶", s: "絲襪奶茶"}, {n: "炸雞", s: "烤雞"}, {n: "筆電", s: "平板"}];
 
 io.on('connection', (socket) => {
     socket.on('join_room', (data) => {
@@ -27,42 +28,33 @@ io.on('connection', (socket) => {
 
     socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
-        if (room && room.host === socket.id) {
-            room.gameStarted = true;
-            room.turnIdx = 0; // 從第一個進房的人開始
-            io.to(data.roomId).emit('game_begin', { 
-                winLines: data.winLines,
-                turnId: room.players[room.turnIdx].id,
-                turnName: room.players[room.turnIdx].name
+        if (!room || room.host !== socket.id) return;
+        room.gameStarted = true;
+        room.turnIdx = 0;
+
+        if (room.gameType === 'spy') {
+            const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
+            const spyIdx = Math.floor(Math.random() * room.players.length);
+            room.players.forEach((p, i) => {
+                io.to(p.id).emit('receive_spy_word', { word: (i === spyIdx ? pair.s : pair.n), role: (i === spyIdx ? '臥底' : '平民') });
             });
         }
+        io.to(data.roomId).emit('game_begin', { winLines: data.winLines, turnId: room.players[0].id, turnName: room.players[0].name });
     });
 
     socket.on('bingo_click', (data) => {
         const room = rooms[data.roomId];
-        if (!room) return;
-        
-        // 驗證是否為該玩家的回合
-        if (room.players[room.turnIdx].id === socket.id) {
+        if (room && room.players[room.turnIdx].id === socket.id) {
             io.to(data.roomId).emit('bingo_sync', data.num);
-            
-            // 切換下一位玩家
             room.turnIdx = (room.turnIdx + 1) % room.players.length;
-            io.to(data.roomId).emit('next_turn', {
-                turnId: room.players[room.turnIdx].id,
-                turnName: room.players[room.turnIdx].name
-            });
+            io.to(data.roomId).emit('next_turn', { turnId: room.players[room.turnIdx].id, turnName: room.players[room.turnIdx].name });
         }
     });
 
-    socket.on('bingo_win', (data) => {
-        io.to(data.roomId).emit('round_over', { winner: data.name });
-    });
-
-    socket.on('send_chat', (data) => {
-        io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg });
-    });
-
+    socket.on('drawing', (data) => socket.to(data.roomId).emit('render_drawing', data));
+    socket.on('bingo_win', (data) => io.to(data.roomId).emit('round_over', { winner: data.name }));
+    socket.on('send_chat', (data) => io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg }));
+    
     socket.on('disconnect', () => {
         const rId = socket.currentRoom;
         if (rooms[rId]) {
