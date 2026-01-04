@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
@@ -6,10 +6,10 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-
-// 1. 設定靜態檔案資料夾：這能解決 404 找不到 bingo.js 的問題
+const path = require('path');
+// 這行是關鍵，它讓瀏覽器能抓到 bingo.js
+app.use(express.static(path.join(__dirname, 'public')));const path = require('path');
 app.use(express.static(path.join(__dirname, 'public')));
-
 const rooms = {};
 const IDLE_TIME = 5 * 60 * 1000; // 5 分鐘閒置檢查
 
