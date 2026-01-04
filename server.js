@@ -1,13 +1,11 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 
 const rooms = {};
 const spyWords = [{n:"泡麵", s:"快煮麵"}, {n:"西瓜", s:"木瓜"}, {n:"炸雞", s:"烤雞"}];
@@ -26,7 +24,6 @@ io.on('connection', (socket) => {
         const room = rooms[data.roomId];
         if (!room || room.host !== socket.id) return;
         room.gameStarted = true;
-        
         if (room.gameType === 'spy') {
             const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
             const spyIdx = Math.floor(Math.random() * room.players.length);
@@ -37,14 +34,12 @@ io.on('connection', (socket) => {
         }
         io.to(data.roomId).emit('game_begin', { 
             gameType: room.gameType, 
+            winLines: data.winLines,
             turnId: room.players[0].id, 
             turnName: room.players[0].name 
         });
     });
 
-    socket.on('drawing', (data) => socket.to(data.roomId).emit('render_drawing', data));
-    socket.on('set_word', (data) => { if(rooms[data.roomId]) rooms[data.roomId].currentAnswer = data.word; });
-    
     socket.on('bingo_click', (data) => {
         const room = rooms[data.roomId];
         if (room && room.players[room.turnIdx].id === socket.id) {
@@ -54,16 +49,8 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('send_chat', (data) => {
-        const room = rooms[data.roomId];
-        if(room && room.gameType === 'draw' && data.msg === room.currentAnswer) {
-            io.to(data.roomId).emit('game_over', { msg: `恭喜 ${socket.username} 猜對了！`, subMsg: `答案就是：${room.currentAnswer}` });
-        } else {
-            io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg });
-        }
-    });
-
-    socket.on('bingo_win', (data) => io.to(data.roomId).emit('game_over', { msg: `獲勝者：${data.name}`, subMsg: "BINGO!" }));
+    socket.on('bingo_win', (data) => io.to(data.roomId).emit('game_over', { msg: `${data.name} 贏了！`, subMsg: "BINGO!" }));
+    socket.on('send_chat', (data) => io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg }));
 });
 
 server.listen(3000, '0.0.0.0');
