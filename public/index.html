@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GameBox 修復版</title>
+    <title>PlayTogether 旗艦版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #F2F0EB; color: #5F6368; touch-action: none; overflow: hidden; }
         .morandi-card { background: white; border-radius: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
         .btn-blue { background-color: #A3B9C9; color: white; }
-        #canvas { background: white; border: 1px solid #eee; border-radius: 1rem; width: 100%; height: 350px; touch-action: none; cursor: crosshair; }
+        #canvas { background: white; border-radius: 1rem; width: 100%; height: 350px; border: 1px solid #eee; touch-action: none; }
         .hidden { display: none !important; }
+        .vote-btn { background: #FDECEC; color: #E2B4B4; border: 1px solid #FAD7D7; padding: 2px 6px; border-radius: 6px; font-size: 10px; margin-top: 4px; }
     </style>
 </head>
 <body class="min-h-screen p-4 flex flex-col items-center">
@@ -18,34 +19,43 @@
     <div class="w-full max-w-md morandi-card p-6 mt-4">
         
         <div id="step-0" class="space-y-4 text-center">
-            <h1 class="text-xl font-light text-gray-300 mb-6 tracking-widest uppercase">Select Mode</h1>
-            <button onclick="selectGame('draw')" class="w-full p-5 border rounded-3xl border-orange-100 text-orange-400 font-bold">🎨 你畫我猜</button>
-            <button onclick="selectGame('bingo')" class="w-full p-5 border rounded-3xl border-blue-100 text-blue-400 font-bold">🔢 輪流 BINGO</button>
+            <h1 class="text-xl font-light text-gray-300 mb-6 tracking-widest uppercase">Game Hub</h1>
+            <button onclick="selectGame('spy')" class="w-full p-5 border rounded-3xl border-green-100 text-green-500 font-bold">🕵️ 誰是臥底</button>
+            <button onclick="selectGame('draw')" class="w-full p-5 border rounded-3xl border-orange-100 text-orange-500 font-bold">🎨 你畫我猜</button>
+            <button onclick="selectGame('bingo')" class="w-full p-5 border rounded-3xl border-blue-100 text-blue-500 font-bold">🔢 輪流 BINGO</button>
         </div>
 
         <div id="step-game" class="hidden space-y-4">
-            <div id="status-bar" class="text-center p-2 bg-gray-50 rounded-xl text-xs font-bold">等待開始...</div>
-            
+            <div id="status-bar" class="flex justify-between items-center p-3 bg-gray-50 rounded-2xl text-xs font-bold">
+                <span id="game-info">準備中</span>
+                <span id="timer-display" class="text-red-400 hidden">倒數: 60s</span>
+            </div>
+
+            <div id="player-list" class="flex gap-2 overflow-x-auto pb-2 border-b min-h-[50px]"></div>
+
+            <div id="spy-ui" class="hidden text-center py-8 bg-green-50/30 rounded-3xl space-y-3">
+                <p class="text-[10px] text-gray-400">你的祕密詞語</p>
+                <h2 id="spy-word-display" class="text-4xl font-bold text-green-600">????</h2>
+                <p id="spy-role-text" class="text-[10px] text-red-300 font-bold"></p>
+                <div id="vote-notice" class="hidden text-[10px] text-orange-400 animate-bounce">請點擊上方玩家「投他」！</div>
+            </div>
+
             <div id="draw-ui" class="hidden space-y-2">
-                <div id="painter-tools" class="hidden bg-orange-50 p-3 rounded-xl">
-                    <div class="flex gap-2">
-                        <input type="text" id="topicInp" class="flex-1 p-2 text-sm rounded border outline-none" placeholder="輸入你想出的題目">
-                        <button onclick="submitTopic()" class="px-4 btn-blue rounded-lg text-xs">出題</button>
-                    </div>
+                <div id="painter-tools" class="hidden bg-orange-50 p-3 rounded-xl flex gap-2">
+                    <input type="text" id="topicInp" class="flex-1 p-2 text-sm rounded border outline-none" placeholder="輸入題目">
+                    <button onclick="submitTopic()" class="px-4 btn-blue rounded-lg text-xs">出題</button>
                 </div>
                 <canvas id="canvas" width="400" height="400"></canvas>
                 <button onclick="socket.emit('clear_canvas', curRoom)" id="clearBtn" class="hidden w-full py-1 text-[10px] bg-gray-100 rounded">清除畫布</button>
             </div>
 
-            <div id="player-list" class="flex gap-2 overflow-x-auto pb-2 border-b"></div>
-
             <div id="chat-box" class="h-28 overflow-y-auto bg-gray-50 rounded-xl p-3 text-[10px] border"></div>
             <div class="flex gap-2">
-                <input type="text" id="chatInp" class="flex-1 p-3 border rounded-xl text-sm outline-none" placeholder="輸入內容...">
+                <input type="text" id="chatInp" class="flex-1 p-3 border rounded-xl text-sm outline-none" placeholder="聊天或猜題...">
                 <button onclick="sendMessage()" class="px-5 btn-blue rounded-xl font-bold">送出</button>
             </div>
 
-            <button id="startBtn" onclick="sendStart()" class="hidden w-full btn-blue py-4 rounded-2xl font-bold shadow-lg">開始遊戲</button>
+            <button id="startBtn" onclick="sendStart()" class="hidden w-full btn-blue py-4 rounded-2xl font-bold">開始遊戲</button>
         </div>
     </div>
 
@@ -57,86 +67,89 @@
 
         function selectGame(g) {
             selectedGame = g;
-            myName = prompt("您的暱稱：") || "Player";
-            curRoom = prompt("房間號碼：") || "123";
+            myName = prompt("暱稱") || "玩家"; curRoom = prompt("房號") || "123";
             document.getElementById('step-0').classList.add('hidden');
             document.getElementById('step-game').classList.remove('hidden');
             socket.emit('join_room', { roomId: curRoom, username: myName, gameType: g });
             if(g === 'draw') document.getElementById('draw-ui').classList.remove('hidden');
+            if(g === 'spy') document.getElementById('spy-ui').classList.remove('hidden');
         }
 
-        // 核心：當房主按下開始
-        function sendStart() {
-            socket.emit('start_game', { roomId: curRoom });
-            document.getElementById('startBtn').classList.add('hidden');
-        }
-
-        // 核心：接收新回合指令
-        socket.on('new_draw_round', (d) => {
-            isPainter = (socket.id === d.painterId);
-            document.getElementById('status-bar').innerText = isPainter ? "🌟 你是畫家，請先出題！" : `🎨 畫家：${d.painterName}`;
-            document.getElementById('painter-tools').classList.toggle('hidden', !isPainter);
-            document.getElementById('clearBtn').classList.toggle('hidden', !isPainter);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // --- 核心邏輯 ---
+        socket.on('receive_spy_word', (d) => {
+            document.getElementById('spy-word-display').innerText = d.word;
+            document.getElementById('spy-role-text').innerText = `身分：${d.role}`;
+            document.getElementById('timer-display').classList.remove('hidden');
         });
 
-        function submitTopic() {
-            const w = document.getElementById('topicInp').value;
-            if(!w) return alert("請輸入題目");
-            socket.emit('set_word', { roomId: curRoom, word: w });
-            document.getElementById('painter-tools').classList.add('hidden');
-            document.getElementById('status-bar').innerText = `正在畫：${w}`;
-        }
+        socket.on('timer_update', (c) => document.getElementById('timer-display').innerText = `倒數: ${c}s`);
+        socket.on('start_voting', () => {
+            document.getElementById('timer-display').innerText = "投票時間！";
+            document.getElementById('vote-notice').classList.remove('hidden');
+            const btns = document.querySelectorAll('.vote-btn');
+            btns.forEach(b => b.classList.remove('hidden'));
+        });
 
-        // 繪圖邏輯
+        socket.on('new_draw_round', (d) => {
+            isPainter = (socket.id === d.painterId);
+            document.getElementById('game-info').innerText = isPainter ? "你的回合" : `畫家: ${d.painterName}`;
+            document.getElementById('painter-tools').classList.toggle('hidden', !isPainter);
+            document.getElementById('clearBtn').classList.toggle('hidden', !isPainter);
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+        });
+
+        // --- 繪圖 (手機優化版) ---
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
             const cx = e.touches ? e.touches[0].clientX : e.clientX;
             const cy = e.touches ? e.touches[0].clientY : e.clientY;
             return { x: (cx-rect.left)*(canvas.width/rect.width), y: (cy-rect.top)*(canvas.height/rect.height) };
         }
-
         canvas.addEventListener('touchstart', (e) => {
             if(!isPainter || !document.getElementById('painter-tools').classList.contains('hidden')) return;
-            drawing = true; const p = getPos(e); [lastX, lastY] = [p.x, p.y];
-            e.preventDefault();
+            drawing = true; const p = getPos(e); [lastX, lastY] = [p.x, p.y]; e.preventDefault();
         }, {passive: false});
-
         canvas.addEventListener('touchmove', (e) => {
             if(!drawing || !isPainter) return;
-            const p = getPos(e);
-            const d = { x: p.x, y: p.y, lastX, lastY, roomId: curRoom };
-            socket.emit('drawing', d); renderDraw(d); [lastX, lastY] = [p.x, p.y];
-            e.preventDefault();
+            const p = getPos(e); const d = { x: p.x, y: p.y, lastX, lastY, roomId: curRoom };
+            socket.emit('drawing', d); renderDraw(d); [lastX, lastY] = [p.x, p.y]; e.preventDefault();
         }, {passive: false});
-
         canvas.addEventListener('touchend', () => drawing = false);
         function renderDraw(d) {
             ctx.beginPath(); ctx.strokeStyle = "#5F6368"; ctx.lineWidth = 4;
             ctx.lineCap = "round"; ctx.moveTo(d.lastX, d.lastY); ctx.lineTo(d.x, d.y); ctx.stroke();
         }
-
         socket.on('render_drawing', (d) => renderDraw(d));
         socket.on('do_clear', () => ctx.clearRect(0,0,canvas.width,canvas.height));
 
+        // --- 系統更新 ---
         socket.on('room_update', (d) => {
             const isHost = (socket.id === d.host);
-            document.getElementById('player-list').innerHTML = d.players.map(p => `<div class="px-3 py-1 bg-gray-50 rounded-full text-[10px] border">${p.name}${p.id === d.host ? '★' : ''}</div>`).join('');
+            document.getElementById('player-list').innerHTML = d.players.map(p => `
+                <div class="flex flex-col items-center">
+                    <div class="px-3 py-1 bg-gray-50 rounded-full text-[10px] border whitespace-nowrap">${p.name}</div>
+                    <button onclick="vote('${p.name}')" class="vote-btn hidden">投他</button>
+                </div>
+            `).join('');
             if(isHost && !d.gameStarted) document.getElementById('startBtn').classList.remove('hidden');
         });
 
-        function sendMessage() {
-            socket.emit('send_chat', { roomId: curRoom, msg: document.getElementById('chatInp').value });
-            document.getElementById('chatInp').value = '';
+        function vote(name) { socket.emit('cast_vote', { roomId: curRoom, targetName: name }); }
+        function submitTopic() {
+            const w = document.getElementById('topicInp').value;
+            if(!w) return;
+            socket.emit('set_word', { roomId: curRoom, word: w });
+            document.getElementById('painter-tools').classList.add('hidden');
+            document.getElementById('game-info').innerText = `正在畫：${w}`;
         }
-
+        function sendStart() { socket.emit('start_game', { roomId: curRoom }); document.getElementById('startBtn').classList.add('hidden'); }
+        function sendMessage() { socket.emit('send_chat', { roomId: curRoom, msg: document.getElementById('chatInp').value }); document.getElementById('chatInp').value = ''; }
         socket.on('chat_msg', (d) => {
-            const cb = document.getElementById('chat-box');
-            cb.innerHTML += `<div><b>${d.name}:</b> ${d.msg}</div>`;
-            cb.scrollTop = cb.scrollHeight;
+            const b = document.getElementById('chat-box');
+            b.innerHTML += `<div><b>${d.name}:</b> ${d.msg}</div>`;
+            b.scrollTop = b.scrollHeight;
         });
-
-        socket.on('round_over', (d) => { alert(`🎉 恭喜 ${d.winner} 猜對了！`); });
+        socket.on('round_over', (d) => alert(`🎉 恭喜 ${d.winner} 猜對了！`));
     </script>
 </body>
 </html>
