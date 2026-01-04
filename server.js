@@ -7,18 +7,16 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// 1. 重要：讓瀏覽器抓得到 public 資料夾裡所有的 .js 檔案
+// 解決 404：指定靜態檔案資料夾為 public
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
 
 io.on('connection', (socket) => {
-    // 玩家加入房間
     socket.on('join_room', (data) => {
         const { roomId, username } = data;
         socket.join(roomId);
         socket.roomId = roomId;
-
         if (!rooms[roomId]) {
             rooms[roomId] = { host: socket.id, players: [], gameStarted: false, winLines: 3 };
         }
@@ -26,7 +24,6 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('room_update', rooms[roomId]);
     });
 
-    // 開始遊戲
     socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
         if (room && room.host === socket.id) {
@@ -34,30 +31,28 @@ io.on('connection', (socket) => {
             room.winLines = parseInt(data.winLines) || 3;
             io.to(data.roomId).emit('game_begin', { 
                 turnId: room.players[0].id, 
+                turnName: room.players[0].name,
                 winLines: room.winLines 
             });
         }
     });
 
-    // Bingo 點擊同步
     socket.on('bingo_click', (data) => {
-        // 同步數字給房間所有人
         io.to(data.roomId).emit('bingo_sync', data.num);
-        
-        // 切換下一位玩家
         const room = rooms[data.roomId];
         if (room) {
             const currentIdx = room.players.findIndex(p => p.id === socket.id);
             const nextIdx = (currentIdx + 1) % room.players.length;
-            io.to(data.roomId).emit('next_turn', { turnId: room.players[nextIdx].id });
+            io.to(data.roomId).emit('next_turn', { 
+                turnId: room.players[nextIdx].id, 
+                turnName: room.players[nextIdx].name 
+            });
         }
     });
 
-    // 🏆 關鍵修正：解決你日誌中的 RangeError (無限遞迴)
+    // 核心修正：避免無限迴圈導致 502
     socket.on('drawing', (data) => {
         if (data.roomId) {
-            // 使用 socket.to 表示發送給房間內「除了自己以外」的人
-            // 這樣你畫畫時，訊息才不會傳回給你自己，避免崩潰
             socket.to(data.roomId).emit('render_drawing', data);
         }
     });
@@ -70,6 +65,5 @@ io.on('connection', (socket) => {
     });
 });
 
-// Render 部署必須監聽 0.0.0.0 並使用 PORT 環境變數
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Server running on ${PORT}`));
