@@ -1,63 +1,82 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PlayTogether - 圈圈叉叉</title>
+    <title>PlayTogether - Bingo</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f0f2f5; }
-        .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; justify-content: center; margin-top: 20px; }
-        .cell { width: 100px; height: 100px; background: white; border: 2px solid #333; font-size: 40px; 
-                display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 8px; }
-        .cell:hover { background: #e0e0e0; }
-        input { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
-        button { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        body { font-family: sans-serif; text-align: center; background: #f4f7f6; }
+        .grid { display: grid; grid-template-columns: repeat(5, 60px); gap: 8px; justify-content: center; margin-top: 20px; }
+        .cell { width: 60px; height: 60px; background: white; border: 2px solid #333; 
+                display: flex; align-items: center; justify-content: center; 
+                font-weight: bold; cursor: pointer; border-radius: 5px; }
+        .cell.marked { background: #ff4757; color: white; border-color: #ff4757; }
+        .status-box { margin: 20px; padding: 10px; background: #dfe4ea; border-radius: 8px; display: inline-block; }
     </style>
 </head>
 <body>
-    <h1>一起玩：圈圈叉叉</h1>
-    <div>
-        <input type="text" id="roomInput" placeholder="輸入房間號碼 (例如 123)">
+    <h1>大家來 Bingo！</h1>
+    <div class="status-box">
+        <input type="text" id="roomInput" placeholder="房間號碼">
         <button onclick="joinRoom()">進入房間</button>
+        <p id="status">請先加入房間</p>
     </div>
-    <p id="status">狀態：尚未進入房間</p>
 
-    <div class="board" id="board">
-        <div class="cell" onclick="makeMove(0)"></div>
-        <div class="cell" onclick="makeMove(1)"></div>
-        <div class="cell" onclick="makeMove(2)"></div>
-        <div class="cell" onclick="makeMove(3)"></div>
-        <div class="cell" onclick="makeMove(4)"></div>
-        <div class="cell" onclick="makeMove(5)"></div>
-        <div class="cell" onclick="makeMove(6)"></div>
-        <div class="cell" onclick="makeMove(7)"></div>
-        <div class="cell" onclick="makeMove(8)"></div>
-    </div>
+    <div class="grid" id="bingoGrid"></div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         let currentRoom = "";
-        const cells = document.querySelectorAll('.cell');
+        let myNumbers = [];
+
+        // 1. 生成 1-25 隨機洗牌數字
+        function generateBingo() {
+            const nums = Array.from({length: 25}, (_, i) => i + 1);
+            nums.sort(() => Math.random() - 0.5);
+            const grid = document.getElementById('bingoGrid');
+            grid.innerHTML = '';
+            
+            nums.forEach(num => {
+                const div = document.createElement('div');
+                div.className = 'cell';
+                div.innerText = num;
+                div.id = `num-${num}`;
+                div.onclick = () => pickNumber(num);
+                grid.appendChild(div);
+            });
+        }
 
         function joinRoom() {
             currentRoom = document.getElementById('roomInput').value;
             if (currentRoom) {
                 socket.emit('join_room', currentRoom);
-                document.getElementById('status').innerText = `狀態：已在房間 ${currentRoom}`;
+                document.getElementById('status').innerText = `已加入房間：${currentRoom}`;
+                generateBingo();
             }
         }
 
-        function makeMove(index) {
-            if (!currentRoom) return alert("請先輸入房間號碼並進入！");
-            if (cells[index].innerText === "") {
-                cells[index].innerText = "O"; // 預設你自己是 O
-                socket.emit('game_move', { roomId: currentRoom, index: index, symbol: "O" });
+        // 2. 點選數字
+        function pickNumber(num) {
+            if (!currentRoom) return;
+            // 標記自己畫面的數字
+            markNumber(num);
+            // 告訴對手也要標記這個數字
+            socket.emit('game_move', { roomId: currentRoom, number: num });
+        }
+
+        // 3. 標記數字的視覺效果
+        function markNumber(num) {
+            const cell = document.getElementById(`num-${num}`);
+            if (cell && !cell.classList.contains('marked')) {
+                cell.classList.add('marked');
             }
         }
 
+        // 4. 接收對手點選的數字
         socket.on('receive_move', (data) => {
-            // 當對方下棋時，在你的畫面顯示對方的符號
-            cells[data.index].innerText = data.symbol === "O" ? "X" : "O";
+            if (data.number) {
+                markNumber(data.number);
+            }
         });
     </script>
 </body>
