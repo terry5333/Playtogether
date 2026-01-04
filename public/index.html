@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Morandi Game Hub</title>
+    <title>Game Hub 最終修正版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root { --blue: #A3B9C9; --green: #2F4F4F; --bg: #F2F0EB; }
@@ -17,7 +17,7 @@
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
 
-    <div id="login-panel" class="w-full max-sm morandi-card p-8 space-y-6">
+    <div id="login-panel" class="w-full max-w-sm morandi-card p-8 space-y-6">
         <h1 class="text-2xl font-black text-center">GAME HUB</h1>
         <div class="space-y-3">
             <input type="text" id="nameInp" placeholder="暱稱" class="w-full p-4 bg-gray-50 rounded-2xl outline-none">
@@ -42,28 +42,26 @@
                 <div id="bingo-grid" class="grid grid-cols-5 gap-2"></div>
                 <button onclick="autoFill()" class="w-full py-2 text-xs text-blue-500 bg-blue-50 rounded-xl">🎲 隨機填號</button>
             </div>
-
             <div id="draw-ui" class="hidden space-y-2">
                 <div id="painter-box" class="hidden bg-blue-50 p-3 rounded-2xl flex gap-2">
                     <input id="topicInp" class="flex-1 p-2 rounded-xl text-xs outline-none" placeholder="輸入題目...">
                     <button onclick="submitTopic()" class="px-4 bg-[#2F4F4F] text-white rounded-xl text-xs">出題</button>
                 </div>
-                <div id="topic-locked" class="hidden text-center p-2 bg-green-50 text-green-700 rounded-xl text-xs font-bold font-bold">✅ 題目已鎖定</div>
+                <div id="topic-locked" class="hidden text-center p-2 bg-green-50 text-green-700 rounded-xl text-xs font-bold">✅ 題目已鎖定</div>
                 <canvas id="canvas" width="600" height="600"></canvas>
             </div>
-
             <div id="spy-ui" class="hidden space-y-4 text-center">
                 <div id="spy-card" onclick="toggleSpy()" class="w-full h-40 bg-gray-50 rounded-3xl flex items-center justify-center border-2 border-dashed border-gray-300">
                     <span id="spy-word-text" class="text-xl font-bold text-gray-400">點擊查看詞語</span>
                 </div>
-                <div id="vote-section" class="hidden grid grid-cols-2 gap-2 mt-4"></div>
+                <div id="vote-section" class="hidden grid grid-cols-2 gap-2"></div>
             </div>
         </div>
 
         <div class="mt-4 space-y-2">
             <div id="setup-area" class="hidden flex items-center gap-2 bg-gray-100 p-2 rounded-xl">
-                <span class="text-[10px] font-bold">獲勝線數：</span>
-                <select id="winLinesSelect" class="bg-white rounded px-2 py-1 text-xs outline-none">
+                <span class="text-[10px] font-bold">連線線數：</span>
+                <select id="winLinesSelect" class="bg-white rounded px-2 py-1 text-xs">
                     <option value="1">1條</option><option value="2">2條</option><option value="3" selected>3條</option><option value="5">5條</option>
                 </select>
             </div>
@@ -75,9 +73,8 @@
     <script>
         const socket = io();
         let myName, curRoom, myGame, isMyTurn = false, gameStarted = false, winTarget = 3;
-        let bingoLayout = Array(25).fill(null), markedCells = Array(25).fill(false), fillCount = 1, mySecret = "";
+        let bingoLayout = Array(25).fill(null), markedCells = Array(25).fill(false), fillCount = 1;
 
-        // --- 核心模式管理 ---
         function confirmJoin(game) {
             myName = document.getElementById('nameInp').value;
             curRoom = document.getElementById('roomInp').value;
@@ -94,7 +91,6 @@
 
         socket.on('room_closed', (d) => { alert(d.msg); window.location.reload(); });
 
-        // --- Bingo 邏輯 ---
         function initBingo() {
             const grid = document.getElementById('bingo-grid'); grid.innerHTML = '';
             for(let i=0; i<25; i++) {
@@ -109,13 +105,13 @@
                 grid.appendChild(b);
             }
         }
+
         function autoFill() {
             const nums = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
             nums.forEach((n, i) => { bingoLayout[i] = n; document.getElementById(`cell-${i}`).innerText = n; });
             fillCount = 26;
         }
 
-        // --- 你畫我猜 (支持手機) ---
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         let isDrawing = false;
@@ -125,26 +121,25 @@
             const cy = e.touches ? e.touches[0].clientY : e.clientY;
             return { x: (cx - rect.left) * (canvas.width / rect.width), y: (cy - rect.top) * (canvas.height / rect.height) };
         }
-        canvas.addEventListener('mousedown', (e) => { if(isMyTurn) isDrawing = true; });
-        canvas.addEventListener('mousemove', (e) => {
+        canvas.onmousedown = (e) => { if(isMyTurn) isDrawing = true; };
+        canvas.onmousemove = (e) => {
             if(!isDrawing || !isMyTurn) return;
             const pos = getPos(e);
             socket.emit('drawing', { ...pos, roomId: curRoom });
             renderDraw(pos);
-        });
-        window.addEventListener('mouseup', () => isDrawing = false);
-        canvas.addEventListener('touchstart', (e) => { if(isMyTurn) isDrawing = true; });
-        canvas.addEventListener('touchmove', (e) => {
+        };
+        window.onmouseup = () => isDrawing = false;
+        canvas.ontouchstart = (e) => { if(isMyTurn) isDrawing = true; };
+        canvas.ontouchmove = (e) => {
             if(!isDrawing || !isMyTurn) return; e.preventDefault();
             const pos = getPos(e);
             socket.emit('drawing', { ...pos, roomId: curRoom });
             renderDraw(pos);
-        });
-        canvas.addEventListener('touchend', () => isDrawing = false);
+        };
+        canvas.ontouchend = () => isDrawing = false;
         function renderDraw(d) { ctx.fillStyle = '#2F4F4F'; ctx.beginPath(); ctx.arc(d.x, d.y, 4, 0, Math.PI*2); ctx.fill(); }
         socket.on('render_drawing', (d) => renderDraw(d));
 
-        // --- 核心同步事件 ---
         function sendStart() {
             const lines = document.getElementById('winLinesSelect').value;
             socket.emit('start_game', { roomId: curRoom, winLines: lines });
@@ -153,7 +148,6 @@
         socket.on('game_begin', (d) => {
             gameStarted = true; winTarget = d.winLines;
             updateTurn(d.turnId, d.turnName);
-            if(myGame === 'draw' && isMyTurn) document.getElementById('painter-box').classList.remove('hidden');
         });
 
         socket.on('next_turn', (d) => updateTurn(d.turnId, d.turnName));
@@ -189,21 +183,14 @@
             }
         });
 
-        // --- 臥底邏輯 ---
-        socket.on('spy_setup', (d) => { mySecret = d.word; });
-        function toggleSpy() {
-            const el = document.getElementById('spy-word-text');
-            el.innerText = el.innerText === "點擊查看詞語" ? mySecret : "點擊查看詞語";
-            el.style.color = el.innerText === "點擊查看詞語" ? "#9ca3af" : "#2F4F4F";
+        function submitTopic() { 
+            const w = document.getElementById('topicInp').value; 
+            if(w) { socket.emit('set_word', { roomId: curRoom, word: w }); }
         }
-        socket.on('timer_tick', (sec) => { const el = document.getElementById('timer-display'); el.classList.remove('hidden'); el.innerText = `${sec}s`; });
-        socket.on('start_voting', () => {
-            const box = document.getElementById('vote-section'); box.classList.remove('hidden');
-            box.innerHTML = players.map(p => `<button onclick="this.disabled=true" class="p-3 bg-white border rounded-xl text-xs">${p.name}</button>`).join('');
+        socket.on('topic_locked', () => { 
+            document.getElementById('painter-box').classList.add('hidden'); 
+            document.getElementById('topic-locked').classList.remove('hidden'); 
         });
-
-        function submitTopic() { const w = document.getElementById('topicInp').value; if(w) socket.emit('set_word', { roomId: curRoom, word: w }); }
-        socket.on('topic_locked', () => { document.getElementById('painter-box').classList.add('hidden'); document.getElementById('topic-locked').classList.remove('hidden'); });
     </script>
 </body>
 </html>
