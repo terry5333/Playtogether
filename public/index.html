@@ -242,3 +242,54 @@
     </script>
 </body>
 </html>
+<div id="spy-ui" class="hidden flex flex-col items-center justify-center py-10 space-y-6">
+    <div class="text-xs font-bold opacity-40 tracking-widest uppercase">Your Secret Word</div>
+    
+    <div id="spy-card" onclick="toggleSpyWord()" class="w-48 h-64 bg-gray-100 rounded-[2rem] flex items-center justify-center cursor-pointer shadow-inner border-4 border-dashed border-gray-200 transition-all">
+        <span id="spy-word-display" class="text-2xl font-black text-gray-300">點擊翻開</span>
+    </div>
+
+    <div id="spy-role-tag" class="px-6 py-2 bg-gray-100 rounded-full text-[10px] font-bold tracking-widest">身分確認中...</div>
+    
+    <p class="text-[10px] text-center opacity-50 max-w-[200px]">
+        平民要找出臥底，臥底要生存到最後。描述時請勿直接說出答案！
+    </p>
+</div>
+
+<script>
+    let mySecretWord = "";
+    let wordVisible = false;
+
+    // 接收身分設定
+    socket.on('spy_setup', (d) => {
+        document.getElementById('spy-ui').classList.remove('hidden');
+        mySecretWord = d.word;
+        document.getElementById('spy-role-tag').innerText = `你的身分：${d.role}`;
+        document.getElementById('spy-role-tag').classList.add(d.role === '臥底' ? 'text-red-400' : 'text-blue-400');
+        
+        // 初始化卡片
+        wordVisible = false;
+        document.getElementById('spy-word-display').innerText = "點擊翻開";
+        document.getElementById('spy-card').style.backgroundColor = "#f3f4f6";
+    });
+
+    function toggleSpyWord() {
+        const display = document.getElementById('spy-word-display');
+        const card = document.getElementById('spy-card');
+        
+        if (!wordVisible) {
+            display.innerText = mySecretWord;
+            display.classList.remove('text-gray-300');
+            display.classList.add('text-[#2F4F4F]');
+            card.style.backgroundColor = "#ffffff";
+            card.style.borderColor = "#A3B9C9";
+            wordVisible = true;
+        } else {
+            display.innerText = "點擊翻開";
+            display.classList.add('text-gray-300');
+            card.style.backgroundColor = "#f3f4f6";
+            card.style.borderColor = "#eeeeee";
+            wordVisible = false;
+        }
+    }
+</script>
