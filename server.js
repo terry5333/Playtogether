@@ -7,33 +7,48 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// 解決 404：指定靜態檔案資料夾為 public
+// 重要：這行解決 404，讓瀏覽器抓到 public 裡的 bingo.js
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
 
 io.on('connection', (socket) => {
     socket.on('join_room', (data) => {
-        const { roomId, username } = data;
+        const { roomId, username, gameType } = data;
         socket.join(roomId);
         socket.roomId = roomId;
         if (!rooms[roomId]) {
-            rooms[roomId] = { host: socket.id, players: [], gameStarted: false, winLines: 3 };
+            rooms[roomId] = { gameType, host: socket.id, players: [], gameStarted: false, winLines: 3 };
         }
         rooms[roomId].players.push({ id: socket.id, name: username });
         io.to(roomId).emit('room_update', rooms[roomId]);
     });
 
+    // 處理誰是臥底身分分配
     socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
-        if (room && room.host === socket.id) {
-            room.gameStarted = true;
-            room.winLines = parseInt(data.winLines) || 3;
-            io.to(data.roomId).emit('game_begin', { 
-                turnId: room.players[0].id, 
-                turnName: room.players[0].name,
-                winLines: room.winLines 
+        if (!room || room.host !== socket.id) return;
+        room.gameStarted = true;
+        room.winLines = parseInt(data.winLines) || 3;
+
+        if (room.gameType === 'spy') {
+            const wordPairs = [["泡麵", "拉麵"], ["蘋果", "水梨"], ["鋼筆", "原子筆"]];
+            const pair = wordPairs[Math.floor(Math.random() * wordPairs.length)];
+            const spyIdx = Math.floor(Math.random() * room.players.length);
+            room.players.forEach((p, idx) => {
+                io.to(p.id).emit('spy_setup', {
+                    role: (idx === spyIdx) ? "臥底" : "平民",
+                    word: (idx === spyIdx) ? pair[1] : pair[0]
+                });
             });
+        }
+        io.to(data.roomId).emit('game_begin', { turnId: room.players[0].id, winLines: room.winLines });
+    });
+
+    // 🏆 關鍵修正：使用 socket.to 避免 502 當機
+    socket.on('drawing', (data) => {
+        if (data.roomId) {
+            socket.to(data.roomId).emit('render_drawing', data);
         }
     });
 
@@ -41,19 +56,9 @@ io.on('connection', (socket) => {
         io.to(data.roomId).emit('bingo_sync', data.num);
         const room = rooms[data.roomId];
         if (room) {
-            const currentIdx = room.players.findIndex(p => p.id === socket.id);
-            const nextIdx = (currentIdx + 1) % room.players.length;
-            io.to(data.roomId).emit('next_turn', { 
-                turnId: room.players[nextIdx].id, 
-                turnName: room.players[nextIdx].name 
-            });
-        }
-    });
-
-    // 核心修正：避免無限迴圈導致 502
-    socket.on('drawing', (data) => {
-        if (data.roomId) {
-            socket.to(data.roomId).emit('render_drawing', data);
+            const idx = room.players.findIndex(p => p.id === socket.id);
+            const nextIdx = (idx + 1) % room.players.length;
+            io.to(data.roomId).emit('next_turn', { turnId: room.players[nextIdx].id });
         }
     });
 
@@ -66,4 +71,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`Server running on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Running on ${PORT}`));
