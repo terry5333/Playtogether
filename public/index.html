@@ -3,102 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PlayTogether 遊戲合輯</title>
+    <title>你畫我猜 - 自訂題目版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #F2F0EB; color: #5F6368; overflow-x: hidden; }
+        body { background-color: #F2F0EB; color: #5F6368; font-family: sans-serif; }
         .morandi-card { background: white; border-radius: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
         .btn-blue { background-color: #A3B9C9; color: white; }
-        #canvas { background: white; touch-action: none; cursor: crosshair; border-radius: 1rem; }
+        #canvas { background: white; touch-action: none; border-radius: 1rem; cursor: crosshair; width: 100%; height: 350px; }
         .hidden { display: none; }
+        .overlay { background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); }
     </style>
 </head>
 <body class="min-h-screen p-4 flex flex-col items-center">
 
-    <div class="w-full max-w-md morandi-card p-6 border border-gray-100">
-        <div id="step-0" class="space-y-4 text-center">
-            <h1 class="text-xl font-light tracking-tighter text-gray-400 mb-6">PLAY TOGETHER</h1>
-            <div onclick="selectGame('draw')" class="p-4 border rounded-2xl cursor-pointer border-orange-100 bg-orange-50/30">🎨 你畫我猜</div>
-            <div onclick="selectGame('spy')" class="p-4 border rounded-2xl cursor-pointer border-green-100 bg-green-50/30">🕵️ 誰是臥底</div>
-            <div onclick="selectGame('bingo')" class="p-4 border rounded-2xl cursor-pointer border-blue-100 bg-blue-50/30">🔢 經典 BINGO</div>
-        </div>
-
-        <div id="step-lobby" class="hidden space-y-4">
-            <input type="text" id="nameInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center" placeholder="輸入暱稱">
-            <input type="text" id="roomIdInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center" placeholder="輸入房號">
-            <button onclick="join()" class="w-full btn-blue py-4 rounded-2xl">進入遊戲</button>
+    <div class="w-full max-w-md morandi-card p-6 mt-4 border border-gray-100">
+        <div id="step-lobby" class="space-y-4">
+            <h1 class="text-center text-gray-400 tracking-widest mb-6">DRAW & GUESS</h1>
+            <input type="text" id="nameInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none" placeholder="你的暱稱">
+            <input type="text" id="roomIdInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none" placeholder="房號">
+            <button onclick="join()" class="w-full btn-blue py-4 rounded-2xl font-bold">進入大廳</button>
         </div>
 
         <div id="step-game" class="hidden space-y-4">
-            <div id="player-list" class="flex gap-2 overflow-x-auto pb-2"></div>
+            <div id="player-list" class="flex gap-2 overflow-x-auto pb-2 border-b border-gray-50"></div>
             
-            <div id="draw-ui" class="hidden space-y-3">
-                <div id="draw-info" class="text-center text-xs text-gray-400 font-bold">等待開始...</div>
-                <canvas id="canvas" width="350" height="350" class="border shadow-inner w-full"></canvas>
-                <div id="painter-tools" class="hidden flex gap-2">
-                    <button onclick="clearCanvas()" class="flex-1 py-2 bg-gray-200 rounded-lg text-xs">清除畫布</button>
-                </div>
-                <div id="guess-area" class="space-y-2">
-                    <div id="chat-box" class="h-32 overflow-y-auto bg-gray-50 rounded-xl p-3 text-[10px] space-y-1"></div>
-                    <div class="flex gap-2">
-                        <input type="text" id="guessInp" class="flex-1 p-2 border rounded-lg outline-none" placeholder="輸入答案...">
-                        <button onclick="sendGuess()" class="px-4 btn-blue rounded-lg">猜!</button>
+            <div class="relative">
+                <div id="status-bar" class="text-center text-[10px] text-gray-400 mb-2 font-bold uppercase tracking-widest">等待房主開始...</div>
+                <canvas id="canvas" width="400" height="400" class="border shadow-inner"></canvas>
+                
+                <div id="word-modal" class="hidden absolute inset-0 overlay rounded-[1rem] flex flex-col items-center justify-center p-6 text-center">
+                    <div class="bg-white p-6 rounded-2xl shadow-xl w-full">
+                        <p class="text-xs text-gray-400 mb-3">你是本輪畫家，請設定題目：</p>
+                        <input type="text" id="customWordInp" class="w-full p-3 bg-gray-50 rounded-xl mb-3 text-center outline-none border" placeholder="例如：珍珠奶茶">
+                        <button onclick="submitWord()" class="w-full btn-blue py-3 rounded-xl">確定出題</button>
                     </div>
                 </div>
             </div>
 
-            <div id="spy-ui" class="hidden text-center p-10 bg-gray-50 rounded-3xl">
-                <h2 id="spy-word" class="text-3xl font-bold text-gray-500">????</h2>
+            <div id="painter-tools" class="hidden flex gap-2">
+                <button onclick="clearCanvas()" class="flex-1 py-2 bg-gray-100 rounded-xl text-xs text-gray-400">清除畫布</button>
             </div>
 
-            <button id="startBtn" onclick="sendStart()" class="hidden w-full btn-blue py-4 rounded-2xl font-medium">開始遊戲</button>
+            <div id="guess-area" class="space-y-2">
+                <div id="chat-box" class="h-32 overflow-y-auto bg-gray-50 rounded-2xl p-4 text-xs space-y-1 border border-gray-100"></div>
+                <div class="flex gap-2">
+                    <input type="text" id="guessInp" class="flex-1 p-3 bg-white border rounded-xl outline-none text-sm" placeholder="輸入你的答案...">
+                    <button onclick="sendGuess()" class="px-6 btn-blue rounded-xl">猜</button>
+                </div>
+            </div>
+
+            <button id="startBtn" onclick="sendStart()" class="hidden w-full btn-blue py-4 rounded-2xl shadow-lg font-bold">開始遊戲</button>
         </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let selectedGame = '', curRoom, myName, isPainter = false;
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        let drawing = false, lastX = 0, lastY = 0;
+        let curRoom, myName, isPainter = false, drawing = false, lastX = 0, lastY = 0;
+        const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 
-        function selectGame(g) { selectedGame = g; document.getElementById('step-0').classList.add('hidden'); document.getElementById('step-lobby').classList.remove('hidden'); }
-        
         function join() {
             myName = document.getElementById('nameInp').value;
             curRoom = document.getElementById('roomIdInp').value;
-            socket.emit('join_room', { roomId: curRoom, username: myName, gameType: selectedGame });
+            if(!myName || !curRoom) return alert("請填寫資訊");
+            socket.emit('join_room', { roomId: curRoom, username: myName, gameType: 'draw' });
             document.getElementById('step-lobby').classList.add('hidden');
             document.getElementById('step-game').classList.remove('hidden');
-            if(selectedGame === 'draw') document.getElementById('draw-ui').classList.remove('hidden');
-            if(selectedGame === 'spy') document.getElementById('spy-ui').classList.remove('hidden');
         }
 
         function sendStart() { socket.emit('start_game', curRoom); }
 
-        // --- 畫布邏輯 ---
+        // --- 出題邏輯 ---
+        socket.on('waiting_for_word', (d) => {
+            const isMe = (socket.id === d.pickerId);
+            document.getElementById('status-bar').innerText = isMe ? "請設定題目..." : `等待 ${d.pickerName} 出題...`;
+            if(isMe) document.getElementById('word-modal').classList.remove('hidden');
+            else document.getElementById('word-modal').classList.add('hidden');
+        });
+
+        function submitWord() {
+            const word = document.getElementById('customWordInp').value;
+            if(!word) return alert("請輸入題目");
+            socket.emit('set_word', { roomId: curRoom, word });
+            document.getElementById('word-modal').classList.add('hidden');
+            document.getElementById('customWordInp').value = '';
+        }
+
+        // --- 繪圖邏輯 ---
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return { x: clientX - rect.left, y: clientY - rect.top };
+            return { x: (clientX - rect.left) * (canvas.width / rect.width), y: (clientY - rect.top) * (canvas.height / rect.height) };
         }
 
         canvas.addEventListener('mousedown', startDraw);
         canvas.addEventListener('touchstart', startDraw);
         canvas.addEventListener('mousemove', draw);
         canvas.addEventListener('touchmove', draw);
-        window.addEventListener('mouseup', stopDraw);
-        window.addEventListener('touchend', stopDraw);
+        window.addEventListener('mouseup', () => drawing = false);
+        window.addEventListener('touchend', () => drawing = false);
 
-        function startDraw(e) {
-            if(!isPainter) return;
-            drawing = true;
-            const pos = getPos(e);
-            lastX = pos.x; lastY = pos.y;
-        }
-
+        function startDraw(e) { if(!isPainter) return; drawing = true; const pos = getPos(e); lastX = pos.x; lastY = pos.y; }
         function draw(e) {
             if(!drawing || !isPainter) return;
             const pos = getPos(e);
@@ -108,26 +114,22 @@
             lastX = pos.x; lastY = pos.y;
         }
 
-        function stopDraw() { drawing = false; }
-
         function renderDraw(data) {
-            ctx.beginPath();
-            ctx.strokeStyle = "#5F6368"; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.lineCap = "round";
-            ctx.moveTo(data.lastX, data.lastY);
-            ctx.lineTo(data.x, data.y);
-            ctx.stroke();
+            ctx.beginPath(); ctx.strokeStyle = "#5F6368"; ctx.lineWidth = 4; ctx.lineCap = "round";
+            ctx.moveTo(data.lastX, data.lastY); ctx.lineTo(data.x, data.y); ctx.stroke();
         }
 
-        function clearCanvas() { socket.emit('clear_canvas', curRoom); }
-        socket.on('do_clear_canvas', () => ctx.clearRect(0, 0, canvas.width, canvas.height));
         socket.on('render_drawing', (data) => renderDraw(data));
+        socket.on('do_clear_canvas', () => ctx.clearRect(0, 0, canvas.width, canvas.height));
+        function clearCanvas() { socket.emit('clear_canvas', curRoom); }
 
-        // --- 遊戲事件 ---
+        // --- 遊戲流程 ---
         socket.on('draw_start', (d) => {
             isPainter = (socket.id === d.painterId);
-            document.getElementById('draw-info').innerText = isPainter ? `你是畫家！題目：${d.word}` : `畫家是：${d.painterName}，快猜！`;
+            document.getElementById('status-bar').innerText = isPainter ? `你的題目：${d.word}` : `猜猜看他在畫什麼？`;
             document.getElementById('painter-tools').classList.toggle('hidden', !isPainter);
             document.getElementById('startBtn').classList.add('hidden');
+            document.getElementById('word-modal').classList.add('hidden');
         });
 
         function sendGuess() {
@@ -137,26 +139,21 @@
             document.getElementById('guessInp').value = '';
         }
 
+        socket.on('round_over', (d) => {
+            alert(`🎉 答對了！贏家是：${d.winner}\n答案是：[${d.word}]`);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+
         socket.on('chat_msg', (d) => {
             const box = document.getElementById('chat-box');
-            box.innerHTML += `<div><span class="font-bold">${d.name}:</span> ${d.msg}</div>`;
+            box.innerHTML += `<div class="py-1 border-b border-gray-50"><span class="text-[#A3B9C9] font-bold">${d.name}:</span> ${d.msg}</div>`;
             box.scrollTop = box.scrollHeight;
         });
 
         socket.on('room_update', (d) => {
             const list = document.getElementById('player-list');
-            list.innerHTML = d.players.map(p => `<div class="px-3 py-1 bg-gray-100 rounded-full text-[10px] whitespace-nowrap">${p.name}</div>`).join('');
+            list.innerHTML = d.players.map(p => `<div class="px-3 py-1 bg-gray-50 rounded-full text-[10px] whitespace-nowrap border">${p.name}</div>`).join('');
             if(socket.id === d.host && !d.gameStarted) document.getElementById('startBtn').classList.remove('hidden');
-        });
-
-        socket.on('receive_spy_word', (d) => {
-            document.getElementById('spy-word').innerText = d.word;
-            document.getElementById('startBtn').classList.add('hidden');
-        });
-
-        socket.on('game_over', (d) => {
-            alert(`🎉 結束！\n${d.winner} 答對了！\n${d.msg}`);
-            location.reload();
         });
     </script>
 </body>
