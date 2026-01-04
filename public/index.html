@@ -1,60 +1,180 @@
-<div id="turn-indicator" class="w-full py-2 mb-2 rounded-lg text-center text-xs font-bold tracking-widest uppercase transition-all shadow-inner">
-    等待遊戲開始...
-</div>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bingo Together - Morandi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #F2F0EB; color: #5F6368; }
+        .btn-blue { background-color: #A3B9C9; color: white; }
+        .btn-green { background-color: #B4C4B8; color: white; }
+        .cell-marked { background-color: #A3B9C9 !important; color: white; border: none; }
+        .my-turn { background-color: #B4C4B8 !important; color: white; animation: pulse 2s infinite; }
+    </style>
+</head>
+<body class="min-h-screen p-4 flex flex-col items-center">
+    <div class="w-full max-w-md bg-white rounded-[2rem] shadow-sm p-8 border border-gray-100">
+        <div id="step-1" class="text-center space-y-6">
+            <h1 class="text-xl tracking-widest text-gray-400">BINGO</h1>
+            <input type="text" id="nameInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none" placeholder="輸入暱稱">
+            <button onclick="toLobby()" class="w-full btn-blue py-4 rounded-2xl font-medium">進入大廳</button>
+        </div>
 
-<script>
-    let isMyTurn = false; // 新增變數追蹤是否輪到自己
+        <div id="step-2" class="hidden space-y-8">
+            <div class="space-y-3">
+                <h3 class="text-[10px] font-bold text-gray-300 uppercase tracking-widest">創建房間</h3>
+                <input type="text" id="cRoomId" placeholder="房號" class="w-full p-3 bg-gray-50 rounded-xl outline-none">
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <input type="number" id="cMaxP" value="2" class="p-2 bg-gray-50 rounded-lg text-center" title="人數">
+                    <input type="number" id="cWinL" value="3" class="p-2 bg-gray-50 rounded-lg text-center" title="線數">
+                </div>
+                <button onclick="join(true)" class="w-full btn-blue py-3 rounded-xl">建立並設定規則</button>
+            </div>
+            <div class="space-y-3">
+                <h3 class="text-[10px] font-bold text-gray-300 uppercase tracking-widest text-right">加入好友</h3>
+                <input type="text" id="jRoomId" placeholder="房號" class="w-full p-3 bg-gray-50 rounded-xl outline-none">
+                <button onclick="join(false)" class="w-full btn-green py-3 rounded-xl">立即加入</button>
+            </div>
+        </div>
 
-    // 修改 startGame 邏輯 (房主可以觸發，或是人數滿了自動觸發)
-    // 這裡假設房主是第一個，所以一開始如果是房主，isMyTurn = true (視你的規則而定)
+        <div id="step-3" class="hidden">
+            <div class="flex justify-between items-center mb-6 text-[10px] font-bold text-gray-300">
+                <span>點擊格子依序填入 1-25</span>
+                <span id="fill-hint" class="btn-blue px-2 py-1 rounded-full">填入: 1</span>
+            </div>
+            <div id="fillGrid" class="grid grid-cols-5 gap-2"></div>
+            <button id="readyBtn" onclick="ready()" disabled class="w-full mt-8 bg-gray-200 text-white py-4 rounded-2xl cursor-not-allowed">等待填號完成</button>
+        </div>
 
-    function mark(num, isFromMe) {
-        const btn = document.getElementById(`cell-${num}`);
-        if(btn && !btn.disabled) {
-            btn.disabled = true;
-            btn.className = "aspect-square cell-marked rounded-xl text-lg font-bold shadow-inner opacity-80";
-            
-            const idxInLayout = myLayout.indexOf(num);
-            boardState[idxInLayout] = true;
-            
-            if (isFromMe) {
-                // 如果是我點的，點完後立刻關閉我的回合，直到接收到 Server 通知
-                isMyTurn = false;
-                updateTurnUI();
+        <div id="step-4" class="hidden">
+            <div id="turn-display" class="w-full py-2 mb-4 rounded-xl text-center text-[10px] font-bold bg-gray-100 text-gray-400">等待房主開始遊戲</div>
+            <div id="player-list" class="flex flex-wrap gap-2 mb-6"></div>
+            <div id="gameGrid" class="grid grid-cols-5 gap-2 mb-6"></div>
+            <div id="log" class="text-center text-[10px] italic text-gray-300"></div>
+            <button id="startBtn" onclick="sendStart()" class="hidden w-full btn-blue py-3 rounded-xl mt-4">開始遊戲</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let myName, curRoom, myLayout = Array(25).fill(null), fillCount = 1, boardState = Array(25).fill(false), isGameOver = false, isMyTurn = false, isHost = false;
+
+        function toLobby() {
+            myName = document.getElementById('nameInp').value;
+            if(!myName) return;
+            document.getElementById('step-1').classList.add('hidden');
+            document.getElementById('step-2').classList.remove('hidden');
+        }
+
+        function join(h) {
+            const r = h ? document.getElementById('cRoomId').value : document.getElementById('jRoomId').value;
+            if(!r) return;
+            curRoom = r; isHost = h;
+            socket.emit('join_room', { roomId: r, username: myName, maxPlayers: document.getElementById('cMaxP').value, winLines: document.getElementById('cWinL').value });
+            document.getElementById('step-2').classList.add('hidden');
+            initFill();
+        }
+
+        function initFill() {
+            document.getElementById('step-3').classList.remove('hidden');
+            const g = document.getElementById('fillGrid');
+            for(let i=0; i<25; i++) {
+                const b = document.createElement('button');
+                b.className = "aspect-square bg-gray-50 rounded-xl text-gray-300 font-bold hover:bg-gray-100 transition-all";
+                b.onclick = () => {
+                    if(myLayout[i]) return;
+                    myLayout[i] = fillCount; b.innerText = fillCount;
+                    b.className = "aspect-square bg-white border border-blue-100 rounded-xl text-blue-400 font-bold shadow-sm";
+                    fillCount++;
+                    if(fillCount > 25) {
+                        document.getElementById('readyBtn').disabled = false;
+                        document.getElementById('readyBtn').className = "w-full mt-8 btn-blue py-4 rounded-2xl";
+                        document.getElementById('readyBtn').innerText = "進入房間預備區";
+                    } else document.getElementById('fill-hint').innerText = `填入: ${fillCount}`;
+                };
+                g.appendChild(b);
             }
-            check();
         }
-    }
 
-    // 更新回合 UI 的顏色與文字
-    function updateTurnUI() {
-        const el = document.getElementById('turn-indicator');
-        if (isMyTurn) {
-            el.innerText = "YOUR TURN | 請喊號碼";
-            el.className = "w-full py-2 mb-2 rounded-lg text-center text-xs font-bold bg-[#B4C4B8] text-white animate-pulse";
-        } else {
-            el.innerText = "WAITING | 等待對方喊號";
-            el.className = "w-full py-2 mb-2 rounded-lg text-center text-xs font-bold bg-gray-200 text-slate-400";
+        function ready() {
+            document.getElementById('step-3').classList.add('hidden');
+            document.getElementById('step-4').classList.remove('hidden');
+            if(isHost) document.getElementById('startBtn').classList.remove('hidden');
+            const g = document.getElementById('gameGrid');
+            myLayout.forEach((num, idx) => {
+                const b = document.createElement('button');
+                b.className = "aspect-square bg-white border border-gray-100 rounded-xl text-lg font-medium text-gray-400";
+                b.innerText = num; b.id = `cell-${num}`;
+                b.onclick = () => {
+                    if(!isMyTurn || isGameOver) return;
+                    socket.emit('game_move', { roomId: curRoom, number: num });
+                    mark(num);
+                };
+                g.appendChild(b);
+            });
         }
-    }
 
-    // 接收動作
-    socket.on('receive_move', (data) => {
-        mark(data.number, false);
-        document.getElementById('log').innerText = `${data.senderName} 喊了 ${data.number}`;
-        
-        // 判斷 Server 傳來的 nextTurnId 是否為我
-        isMyTurn = (socket.id === data.nextTurnId);
-        updateTurnUI();
-    });
+        function sendStart() { socket.emit('start_game', curRoom); }
 
-    // 初始進入房間時同步
-    socket.on('room_update', (data) => {
-        // ... 原有的名單更新 ...
-        // 如果遊戲剛開始，設定第一個進來的人(Host)先開始
-        if (data.players.length >= 1 && !isMyTurn && data.host === socket.id) {
-            isMyTurn = true;
-            updateTurnUI();
+        function mark(num) {
+            const btn = document.getElementById(`cell-${num}`);
+            if(btn && !btn.disabled) {
+                btn.disabled = true;
+                btn.className = "aspect-square cell-marked rounded-xl text-lg font-bold shadow-inner opacity-80";
+                boardState[myLayout.indexOf(num)] = true;
+                isMyTurn = false; updateUI(); check();
+            }
         }
-    });
-</script>
+
+        function check() {
+            let lines = 0;
+            const checkLine = (indices) => indices.every(i => boardState[i]);
+            for(let i=0; i<5; i++) {
+                if(checkLine([i*5, i*5+1, i*5+2, i*5+3, i*5+4])) lines++;
+                if(checkLine([i, i+5, i+10, i+15, i+20])) lines++;
+            }
+            if(checkLine([0, 6, 12, 18, 24])) lines++;
+            if(checkLine([4, 8, 12, 16, 20])) lines++;
+            if(lines >= 3) socket.emit('player_win', { roomId: curRoom }); // 這邊線數可連動 Server
+        }
+
+        function updateUI(nextName) {
+            const t = document.getElementById('turn-display');
+            if(isGameOver) return;
+            if(isMyTurn) {
+                t.innerText = "YOUR TURN | 請喊號碼"; t.className = "w-full py-2 mb-4 rounded-xl text-center text-[10px] font-bold my-turn";
+            } else {
+                t.innerText = nextName ? `WAITING | 輪到 ${nextName}` : "WAITING | 等待對手";
+                t.className = "w-full py-2 mb-4 rounded-xl text-center text-[10px] font-bold bg-gray-100 text-gray-400";
+            }
+        }
+
+        socket.on('room_update', (d) => {
+            const list = document.getElementById('player-list');
+            list.innerHTML = d.players.map(p => `<span class="px-3 py-1 bg-gray-50 text-[10px] rounded-lg">${p.name}${p.id===d.host?'★':''}</span>`).join('');
+        });
+
+        socket.on('game_begin', (d) => {
+            document.getElementById('startBtn').classList.add('hidden');
+            isMyTurn = (socket.id === d.nextTurnId);
+            updateUI(d.nextTurnName);
+        });
+
+        socket.on('receive_move', (d) => {
+            mark(d.number);
+            isMyTurn = (socket.id === d.nextTurnId);
+            updateUI(d.nextTurnName);
+            document.getElementById('log').innerText = `${d.senderName} 喊了 ${d.number}`;
+        });
+
+        socket.on('game_over', (d) => {
+            isGameOver = true;
+            document.getElementById('turn-display').innerText = `🏆 WINNER: ${d.winner}`;
+            document.getElementById('turn-display').className = "w-full py-2 mb-4 rounded-xl text-center text-[10px] font-bold bg-yellow-400 text-white";
+            alert(`遊戲結束！恭喜 ${d.winner} 獲勝！`);
+        });
+    </script>
+</body>
+</html>
