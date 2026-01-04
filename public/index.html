@@ -3,52 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>你畫我猜 - 自訂題目版</title>
+    <title>你畫我猜 - 修復版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #F2F0EB; color: #5F6368; font-family: sans-serif; }
         .morandi-card { background: white; border-radius: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
         .btn-blue { background-color: #A3B9C9; color: white; }
         #canvas { background: white; touch-action: none; border-radius: 1rem; cursor: crosshair; width: 100%; height: 350px; }
-        .hidden { display: none; }
-        .overlay { background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); }
+        .hidden { display: none !important; }
+        .overlay { background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 50; }
     </style>
 </head>
 <body class="min-h-screen p-4 flex flex-col items-center">
 
     <div class="w-full max-w-md morandi-card p-6 mt-4 border border-gray-100">
         <div id="step-lobby" class="space-y-4">
-            <h1 class="text-center text-gray-400 tracking-widest mb-6">DRAW & GUESS</h1>
-            <input type="text" id="nameInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none" placeholder="你的暱稱">
-            <input type="text" id="roomIdInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none" placeholder="房號">
-            <button onclick="join()" class="w-full btn-blue py-4 rounded-2xl font-bold">進入大廳</button>
+            <h1 class="text-center text-gray-400 tracking-widest mb-6 font-bold uppercase">Draw & Guess</h1>
+            <input type="text" id="nameInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none border border-transparent focus:border-blue-100" placeholder="你的暱稱">
+            <input type="text" id="roomIdInp" class="w-full p-4 bg-gray-50 rounded-2xl text-center outline-none border border-transparent focus:border-blue-100" placeholder="房號 (例如: 1234)">
+            <button onclick="join()" class="w-full btn-blue py-4 rounded-2xl font-bold shadow-sm">進入遊戲</button>
         </div>
 
         <div id="step-game" class="hidden space-y-4">
-            <div id="player-list" class="flex gap-2 overflow-x-auto pb-2 border-b border-gray-50"></div>
+            <div id="player-list" class="flex gap-2 overflow-x-auto pb-2 border-b border-gray-50 min-h-[40px]"></div>
             
             <div class="relative">
-                <div id="status-bar" class="text-center text-[10px] text-gray-400 mb-2 font-bold uppercase tracking-widest">等待房主開始...</div>
+                <div id="status-bar" class="text-center text-[10px] text-gray-400 mb-2 font-bold uppercase tracking-widest">等待房主開始遊戲...</div>
                 <canvas id="canvas" width="400" height="400" class="border shadow-inner"></canvas>
                 
                 <div id="word-modal" class="hidden absolute inset-0 overlay rounded-[1rem] flex flex-col items-center justify-center p-6 text-center">
                     <div class="bg-white p-6 rounded-2xl shadow-xl w-full">
                         <p class="text-xs text-gray-400 mb-3">你是本輪畫家，請設定題目：</p>
                         <input type="text" id="customWordInp" class="w-full p-3 bg-gray-50 rounded-xl mb-3 text-center outline-none border" placeholder="例如：珍珠奶茶">
-                        <button onclick="submitWord()" class="w-full btn-blue py-3 rounded-xl">確定出題</button>
+                        <button onclick="submitWord()" class="w-full btn-blue py-3 rounded-xl font-bold">確定出題</button>
                     </div>
                 </div>
             </div>
 
             <div id="painter-tools" class="hidden flex gap-2">
-                <button onclick="clearCanvas()" class="flex-1 py-2 bg-gray-100 rounded-xl text-xs text-gray-400">清除畫布</button>
+                <button onclick="clearCanvas()" class="flex-1 py-2 bg-gray-100 rounded-xl text-xs text-gray-400 hover:bg-gray-200 transition">清除畫布</button>
             </div>
 
             <div id="guess-area" class="space-y-2">
                 <div id="chat-box" class="h-32 overflow-y-auto bg-gray-50 rounded-2xl p-4 text-xs space-y-1 border border-gray-100"></div>
                 <div class="flex gap-2">
-                    <input type="text" id="guessInp" class="flex-1 p-3 bg-white border rounded-xl outline-none text-sm" placeholder="輸入你的答案...">
-                    <button onclick="sendGuess()" class="px-6 btn-blue rounded-xl">猜</button>
+                    <input type="text" id="guessInp" class="flex-1 p-3 bg-white border rounded-xl outline-none text-sm" placeholder="輸入答案...">
+                    <button onclick="sendGuess()" class="px-6 btn-blue rounded-xl font-bold">猜</button>
                 </div>
             </div>
 
@@ -65,15 +65,34 @@
         function join() {
             myName = document.getElementById('nameInp').value;
             curRoom = document.getElementById('roomIdInp').value;
-            if(!myName || !curRoom) return alert("請填寫資訊");
+            if(!myName || !curRoom) return alert("請填寫姓名與房號");
+            
             socket.emit('join_room', { roomId: curRoom, username: myName, gameType: 'draw' });
             document.getElementById('step-lobby').classList.add('hidden');
             document.getElementById('step-game').classList.remove('hidden');
         }
 
-        function sendStart() { socket.emit('start_game', curRoom); }
+        function sendStart() {
+            socket.emit('start_game', curRoom);
+            document.getElementById('startBtn').classList.add('hidden');
+        }
 
-        // --- 出題邏輯 ---
+        // --- 核心邏輯修正：監聽房間更新 ---
+        socket.on('room_update', (d) => {
+            // 更新玩家名單
+            const list = document.getElementById('player-list');
+            list.innerHTML = d.players.map(p => `<div class="px-3 py-1 bg-gray-50 rounded-full text-[10px] whitespace-nowrap border border-gray-100">${p.name}${p.id === d.host ? ' (房主)' : ''}</div>`).join('');
+            
+            // 如果你是房主，且遊戲還沒開始，就顯示「開始遊戲」按鈕
+            const startBtn = document.getElementById('startBtn');
+            if (socket.id === d.host && !d.gameStarted) {
+                startBtn.classList.remove('hidden');
+            } else {
+                startBtn.classList.add('hidden');
+            }
+        });
+
+        // --- 出題與遊戲流程 ---
         socket.on('waiting_for_word', (d) => {
             const isMe = (socket.id === d.pickerId);
             document.getElementById('status-bar').innerText = isMe ? "請設定題目..." : `等待 ${d.pickerName} 出題...`;
@@ -89,18 +108,29 @@
             document.getElementById('customWordInp').value = '';
         }
 
+        socket.on('draw_start', (d) => {
+            isPainter = (socket.id === d.painterId);
+            document.getElementById('status-bar').innerText = isPainter ? `你的題目：${d.word}` : `猜猜看他在畫什麼？`;
+            document.getElementById('painter-tools').classList.toggle('hidden', !isPainter);
+            document.getElementById('word-modal').classList.add('hidden');
+            document.getElementById('startBtn').classList.add('hidden');
+        });
+
         // --- 繪圖邏輯 ---
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return { x: (clientX - rect.left) * (canvas.width / rect.width), y: (clientY - rect.top) * (canvas.height / rect.height) };
+            return { 
+                x: (clientX - rect.left) * (canvas.width / rect.width), 
+                y: (clientY - rect.top) * (canvas.height / rect.height) 
+            };
         }
 
         canvas.addEventListener('mousedown', startDraw);
-        canvas.addEventListener('touchstart', startDraw);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDraw(e); }, {passive: false});
         canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); }, {passive: false});
         window.addEventListener('mouseup', () => drawing = false);
         window.addEventListener('touchend', () => drawing = false);
 
@@ -115,22 +145,13 @@
         }
 
         function renderDraw(data) {
-            ctx.beginPath(); ctx.strokeStyle = "#5F6368"; ctx.lineWidth = 4; ctx.lineCap = "round";
+            ctx.beginPath(); ctx.strokeStyle = "#5F6368"; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
             ctx.moveTo(data.lastX, data.lastY); ctx.lineTo(data.x, data.y); ctx.stroke();
         }
 
         socket.on('render_drawing', (data) => renderDraw(data));
         socket.on('do_clear_canvas', () => ctx.clearRect(0, 0, canvas.width, canvas.height));
         function clearCanvas() { socket.emit('clear_canvas', curRoom); }
-
-        // --- 遊戲流程 ---
-        socket.on('draw_start', (d) => {
-            isPainter = (socket.id === d.painterId);
-            document.getElementById('status-bar').innerText = isPainter ? `你的題目：${d.word}` : `猜猜看他在畫什麼？`;
-            document.getElementById('painter-tools').classList.toggle('hidden', !isPainter);
-            document.getElementById('startBtn').classList.add('hidden');
-            document.getElementById('word-modal').classList.add('hidden');
-        });
 
         function sendGuess() {
             const msg = document.getElementById('guessInp').value;
@@ -140,7 +161,7 @@
         }
 
         socket.on('round_over', (d) => {
-            alert(`🎉 答對了！贏家是：${d.winner}\n答案是：[${d.word}]`);
+            alert(`🎉 答對了！\n玩家 [${d.winner}] 猜中了答案：${d.word}`);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         });
 
@@ -148,12 +169,6 @@
             const box = document.getElementById('chat-box');
             box.innerHTML += `<div class="py-1 border-b border-gray-50"><span class="text-[#A3B9C9] font-bold">${d.name}:</span> ${d.msg}</div>`;
             box.scrollTop = box.scrollHeight;
-        });
-
-        socket.on('room_update', (d) => {
-            const list = document.getElementById('player-list');
-            list.innerHTML = d.players.map(p => `<div class="px-3 py-1 bg-gray-50 rounded-full text-[10px] whitespace-nowrap border">${p.name}</div>`).join('');
-            if(socket.id === d.host && !d.gameStarted) document.getElementById('startBtn').classList.remove('hidden');
         });
     </script>
 </body>
