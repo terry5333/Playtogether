@@ -22,59 +22,37 @@ io.on('connection', (socket) => {
         if (!rooms[rId]) {
             rooms[rId] = {
                 gameType, host: socket.id, players: [],
-                gameStarted: false, turnIndex: 0, currentWord: "", currentPainter: null
+                gameStarted: false, winLines: 3
             };
         }
         rooms[rId].players.push({ id: socket.id, name: username });
         io.to(rId).emit('room_update', rooms[rId]);
     });
 
-    // 房主啟動遊戲，通知第一位玩家出題
-    socket.on('start_game', (roomId) => {
-        const room = rooms[roomId];
-        if (!room || room.host !== socket.id) return;
-        room.gameStarted = true;
-        sendPickerNotification(roomId);
-    });
-
-    // 通知當前輪到的玩家「設定題目」
-    function sendPickerNotification(roomId) {
-        const room = rooms[roomId];
-        const picker = room.players[room.turnIndex];
-        room.currentPainter = picker.id;
-        io.to(roomId).emit('waiting_for_word', { pickerName: picker.name, pickerId: picker.id });
-    }
-
-    // 玩家提交自己出的題目
-    socket.on('set_word', (data) => {
+    socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
-        if (room && socket.id === room.currentPainter) {
-            room.currentWord = data.word;
-            io.to(data.roomId).emit('draw_start', { 
-                painterId: room.currentPainter, 
-                painterName: socket.username,
-                word: room.currentWord 
-            });
+        if (room && room.host === socket.id) {
+            room.gameStarted = true;
+            room.winLines = data.winLines || 3;
+            io.to(data.roomId).emit('game_begin', { winLines: room.winLines });
         }
     });
 
+    // BINGO 數字廣播
+    socket.on('bingo_click', (data) => {
+        io.to(data.roomId).emit('bingo_sync', data.num);
+    });
+
+    // BINGO 勝負判定
+    socket.on('bingo_win', (data) => {
+        io.to(data.roomId).emit('round_over', { winner: data.name, msg: `連線已達 ${data.lines} 條！` });
+    });
+
+    // 你畫我猜繪圖廣播
     socket.on('drawing', (data) => socket.to(data.roomId).emit('render_drawing', data));
-    socket.on('clear_canvas', (roomId) => io.to(roomId).emit('do_clear_canvas'));
 
-    socket.on('send_guess', (data) => {
-        const room = rooms[data.roomId];
-        if (room && data.msg === room.currentWord) {
-            io.to(data.roomId).emit('round_over', { winner: socket.username, word: room.currentWord });
-            
-            // 輪向下一位
-            room.turnIndex = (room.turnIndex + 1) % room.players.length;
-            setTimeout(() => {
-                io.to(data.roomId).emit('do_clear_canvas');
-                sendPickerNotification(data.roomId);
-            }, 3000);
-        } else {
-            io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg });
-        }
+    socket.on('send_chat', (data) => {
+        io.to(data.roomId).emit('chat_msg', { name: socket.username, msg: data.msg });
     });
 
     socket.on('disconnect', () => {
@@ -88,4 +66,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0');
+server.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
