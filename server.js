@@ -1,35 +1,95 @@
-// 在 server.js 的 join_room 邏輯中，初始化 turnIndex
-if (!rooms[rId]) {
-    rooms[rId] = {
-        host: socket.id,
-        maxPlayers: parseInt(maxPlayers) || 2,
-        winLines: parseInt(winLines) || 5,
-        players: [],
-        turnIndex: 0, // 從第一個進入的人開始
-        isFinished: false,
-        gameStarted: false
-    };
-}
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
 
-// 修改 game_move 邏輯
-socket.on('game_move', (data) => {
-    const room = rooms[data.roomId];
-    if (room && !room.isFinished) {
-        const currentPlayer = room.players[room.turnIndex];
-        
-        // 檢查發送者是否為當前輪到的玩家
-        if (socket.id !== currentPlayer.id) {
-            return socket.emit('error_msg', '還沒輪到你喔！');
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+const rooms = {};
+
+io.on('connection', (socket) => {
+    socket.on('join_room', (data) => {
+        const { roomId, username, maxPlayers, winLines } = data;
+        const rId = roomId.trim();
+        socket.join(rId);
+        socket.username = username;
+        socket.currentRoom = rId;
+
+        if (!rooms[rId]) {
+            rooms[rId] = {
+                host: socket.id,
+                maxPlayers: parseInt(maxPlayers) || 2,
+                winLines: parseInt(winLines) || 3,
+                players: [],
+                turnIndex: 0,
+                isFinished: false,
+                gameStarted: false
+            };
         }
 
-        // 切換到下一個玩家
-        room.turnIndex = (room.turnIndex + 1) % room.players.length;
+        const room = rooms[rId];
+        room.players.push({ id: socket.id, name: username });
 
-        // 廣播數字與下一個輪到誰
-        io.to(data.roomId).emit('receive_move', {
-            number: data.number,
-            senderName: socket.username,
-            nextTurnId: room.players[room.turnIndex].id
+        io.to(rId).emit('room_update', {
+            host: room.host,
+            players: room.players,
+            maxPlayers: room.maxPlayers,
+            winLines: room.winLines,
+            gameStarted: room.gameStarted
         });
-    }
+    });
+
+    socket.on('start_game', (roomId) => {
+        const room = rooms[roomId];
+        if (room && room.host === socket.id) {
+            room.gameStarted = true;
+            io.to(roomId).emit('game_begin', { 
+                nextTurnId: room.players[room.turnIndex].id,
+                nextTurnName: room.players[room.turnIndex].name
+            });
+        }
+    });
+
+    socket.on('game_move', (data) => {
+        const room = rooms[data.roomId];
+        if (room && room.gameStarted && !room.isFinished) {
+            const currentPlayer = room.players[room.turnIndex];
+            if (socket.id !== currentPlayer.id) return;
+
+            room.turnIndex = (room.turnIndex + 1) % room.players.length;
+            io.to(data.roomId).emit('receive_move', {
+                number: data.number,
+                senderName: socket.username,
+                nextTurnId: room.players[room.turnIndex].id,
+                nextTurnName: room.players[room.turnIndex].name
+            });
+        }
+    });
+
+    socket.on('player_win', (data) => {
+        const room = rooms[data.roomId];
+        if (room && !room.isFinished) {
+            room.isFinished = true;
+            io.to(data.roomId).emit('game_over', { winner: socket.username });
+        }
+    });
+
+    socket.on('disconnect', () => {
+        const rId = socket.currentRoom;
+        if (rooms[rId]) {
+            rooms[rId].players = rooms[rId].players.filter(p => p.id !== socket.id);
+            if (rooms[rId].players.length === 0) delete rooms[rId];
+            else {
+                if (rooms[rId].host === socket.id) rooms[rId].host = rooms[rId].players[0].id;
+                io.to(rId).emit('room_update', { host: rooms[rId].host, players: rooms[rId].players });
+            }
+        }
+    });
 });
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => console.log(`Server on ${PORT}`));
