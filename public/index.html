@@ -2,106 +2,131 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PlayTogether - Bingo 完整版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlayTogether - Premium Bingo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #f0f4f8; color: #333; }
-        .container { max-width: 400px; margin: 0 auto; padding: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 20px; }
-        .cell { aspect-ratio: 1; background: white; border: 2px solid #cbd5e0; 
-                display: flex; align-items: center; justify-content: center; 
-                font-size: 1.2rem; font-weight: bold; cursor: pointer; border-radius: 8px; transition: 0.2s; }
-        .cell:hover { background: #edf2f7; transform: scale(1.05); }
-        .cell.marked { background: #4299e1; color: white; border-color: #3182ce; }
-        .status-box { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 60%; }
-        button { padding: 8px 16px; background: #48bb78; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        #lineCount { font-size: 1.5rem; color: #e53e3e; margin: 10px 0; }
+        .cell-active { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .marked { background-color: #3b82f6 !important; color: white; border-color: #2563eb; transform: scale(0.95); }
     </style>
 </head>
-<body>
-    <div class="container">
-        <h1>Bingo 連線對戰</h1>
-        <div class="status-box">
-            <input type="text" id="roomInput" placeholder="輸入房間號碼">
-            <button onclick="joinRoom()">加入</button>
-            <p id="status">請先加入房間</p>
-            <div id="lineCount">連線數: 0</div>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+    <div class="max-w-md mx-auto px-4 py-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-blue-600 tracking-tight">BINGO!</h1>
+            <p class="text-slate-500 mt-2">與好友即時連線對戰</p>
+        </header>
+
+        <div id="setup-panel" class="bg-white rounded-2xl shadow-xl p-6 mb-6">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">房間代碼</label>
+                    <input type="text" id="roomInput" class="w-full mt-1 p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="輸入自訂代碼">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">人數上限</label>
+                        <input type="number" id="maxPlayers" value="2" class="w-full mt-1 p-3 border rounded-xl">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">勝利連線數</label>
+                        <input type="number" id="winLines" value="5" class="w-full mt-1 p-3 border rounded-xl">
+                    </div>
+                </div>
+                <button onclick="joinRoom()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-200">
+                    建立 / 加入房間
+                </button>
+            </div>
         </div>
 
-        <div class="grid" id="bingoGrid"></div>
+        <div id="game-panel" class="hidden">
+            <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm mb-4">
+                <div class="text-sm font-semibold">房間: <span id="display-room" class="text-blue-600">--</span></div>
+                <div id="line-badge" class="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm font-bold">連線: 0 / 5</div>
+            </div>
+            
+            <div id="bingoGrid" class="grid grid-cols-5 gap-2 bg-white p-4 rounded-2xl shadow-xl border-4 border-white">
+                </div>
+            
+            <p id="player-status" class="text-center text-slate-400 text-sm mt-4">等待對手加入...</p>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         let currentRoom = "";
-        let boardState = Array(25).fill(false); // 追蹤哪一格被點了
-        let numberToIdx = {}; // 快速對照：數字 -> 陣列索引
-
-        function generateBingo() {
-            const nums = Array.from({length: 25}, (_, i) => i + 1);
-            nums.sort(() => Math.random() - 0.5);
-            const grid = document.getElementById('bingoGrid');
-            grid.innerHTML = '';
-            
-            nums.forEach((num, idx) => {
-                numberToIdx[num] = idx; // 記錄這個數字在第幾格
-                const div = document.createElement('div');
-                div.className = 'cell';
-                div.innerText = num;
-                div.id = `idx-${idx}`;
-                div.onclick = () => pickNumber(num);
-                grid.appendChild(div);
-            });
-        }
+        let boardState = Array(25).fill(false);
+        let numberToIdx = {};
+        let targetLines = 5;
 
         function joinRoom() {
-            currentRoom = document.getElementById('roomInput').value;
-            if (currentRoom) {
-                socket.emit('join_room', currentRoom);
-                document.getElementById('status').innerText = `房間：${currentRoom}`;
-                generateBingo();
-            }
+            const roomId = document.getElementById('roomInput').value;
+            const maxPlayers = document.getElementById('maxPlayers').value;
+            const winLines = document.getElementById('winLines').value;
+            
+            if (!roomId) return alert("請輸入房間號碼");
+            
+            targetLines = parseInt(winLines);
+            socket.emit('join_room', { roomId, maxPlayers, winLines });
+            
+            document.getElementById('setup-panel').classList.add('hidden');
+            document.getElementById('game-panel').classList.remove('hidden');
+            document.getElementById('display-room').innerText = roomId;
+            document.getElementById('line-badge').innerText = `連線: 0 / ${targetLines}`;
+            
+            generateBingo();
         }
 
-        function pickNumber(num) {
-            if (!currentRoom) return;
-            socket.emit('game_move', { roomId: currentRoom, number: num });
-            markNumber(num);
+        function generateBingo() {
+            const nums = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+            const grid = document.getElementById('bingoGrid');
+            grid.innerHTML = '';
+            nums.forEach((num, idx) => {
+                numberToIdx[num] = idx;
+                const btn = document.createElement('button');
+                btn.className = "cell aspect-square bg-slate-100 rounded-lg text-xl font-bold hover:bg-slate-200 transition-all border-b-4 border-slate-300 active:border-b-0 cell-active";
+                btn.innerText = num;
+                btn.id = `idx-${idx}`;
+                btn.onclick = () => {
+                    socket.emit('game_move', { roomId: document.getElementById('roomInput').value, number: num });
+                    markNumber(num);
+                };
+                grid.appendChild(btn);
+            });
         }
 
         function markNumber(num) {
             const idx = numberToIdx[num];
             if (idx !== undefined && !boardState[idx]) {
                 boardState[idx] = true;
-                document.getElementById(`idx-${idx}`).classList.add('marked');
+                const el = document.getElementById(`idx-${idx}`);
+                el.classList.add('marked');
+                el.disabled = true;
                 checkWin();
             }
         }
 
         function checkWin() {
             let lines = 0;
-            // 橫線
             for (let i = 0; i < 5; i++) {
-                if ([0,1,2,3,4].every(j => boardState[i*5 + j])) lines++;
+                if ([0,1,2,3,4].every(j => boardState[i*5 + j])) lines++; // 橫
+                if ([0,1,2,3,4].every(j => boardState[j*5 + i])) lines++; // 豎
             }
-            // 豎線
-            for (let i = 0; i < 5; i++) {
-                if ([0,1,2,3,4].every(j => boardState[j*5 + i])) lines++;
-            }
-            // 斜線
             if ([0,6,12,18,24].every(i => boardState[i])) lines++;
             if ([4,8,12,16,20].every(i => boardState[i])) lines++;
 
-            document.getElementById('lineCount').innerText = `連線數: ${lines}`;
-            if (lines >= 5) {
-                alert("BINGO! 你贏了！");
-            }
+            document.getElementById('line-badge').innerText = `連線: ${lines} / ${targetLines}`;
+            if (lines >= targetLines) alert("🎉 BINGO! 你贏了！");
         }
 
-        socket.on('receive_move', (data) => {
-            if (data.number) markNumber(data.number);
+        socket.on('room_update', (data) => {
+            document.getElementById('player-status').innerText = `目前人數: ${data.currentPlayers} / ${data.maxPlayers}`;
+            targetLines = data.winLines;
+            document.getElementById('line-badge').innerText = `連線: 0 / ${targetLines}`;
         });
+
+        socket.on('receive_move', (data) => markNumber(data.number));
     </script>
 </body>
 </html>
