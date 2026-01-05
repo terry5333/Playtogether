@@ -13,11 +13,11 @@ let rooms = {};
 const ADMIN_KEY = "admin888";
 
 io.on('connection', (socket) => {
-    // 1. 創建房間
+    // 1. 創建房間邏輯
     socket.on('create_room', () => {
         const roomId = Math.floor(1000 + Math.random() * 9000).toString();
         rooms[roomId] = {
-            host: socket.id, // 創建者 ID
+            host: socket.id, // 創建者即為房主
             players: [],
             gameStarted: false,
             scores: {},
@@ -26,7 +26,7 @@ io.on('connection', (socket) => {
         socket.emit('room_created', { roomId });
     });
 
-    // 2. 加入房間
+    // 2. 加入房間邏輯
     socket.on('join_room', (data) => {
         const { roomId, username } = data;
         if (!rooms[roomId]) return socket.emit('error_msg', '房間不存在');
@@ -35,16 +35,16 @@ io.on('connection', (socket) => {
         socket.roomId = roomId;
         socket.username = username;
 
-        // 如果原房主消失，補上新房主
+        // 如果房主斷線，讓第一個加入的補位
         if (!rooms[roomId].host) rooms[roomId].host = socket.id;
 
-        // 避免重複加入
+        // 確保不重複加入名單
         if (!rooms[roomId].players.find(p => p.id === socket.id)) {
             rooms[roomId].players.push({ id: socket.id, name: username });
             rooms[roomId].scores[username] = 0;
         }
 
-        // 重要：對全房間廣播最新狀態
+        // 廣播最新房間狀態 (包含 hostId 用於判定房主權限)
         io.to(roomId).emit('room_update', {
             roomId: roomId,
             players: rooms[roomId].players,
@@ -53,7 +53,7 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 房主發起遊戲設定
+    // 3. 房主發起遊戲
     socket.on('start_game_with_config', (data) => {
         const room = rooms[data.roomId];
         if (room && room.host === socket.id) {
@@ -62,8 +62,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 聊天與猜題... (略)
-
+    // 4. 斷線處理
     socket.on('disconnect', () => {
         if (socket.roomId && rooms[socket.roomId]) {
             const room = rooms[socket.roomId];
@@ -83,4 +82,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server on ${PORT}`));
+server.listen(PORT, () => console.log(`伺服器成功啟動於端口 ${PORT}`));
