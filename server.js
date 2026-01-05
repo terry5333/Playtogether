@@ -7,21 +7,18 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-// 設定靜態檔案目錄
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
 const ADMIN_KEY = "1010215";
 
 io.on('connection', (socket) => {
-    // 創建房間
     socket.on('create_room', () => {
         const roomId = Math.floor(1000 + Math.random() * 9000).toString();
         rooms[roomId] = { host: socket.id, players: [], gameType: "大廳", turnIdx: 0, currentRound: 1, totalRounds: 1, bingoMarked: [] };
         socket.emit('room_created', { roomId });
     });
 
-    // 加入房間
     socket.on('join_room', (data) => {
         const { roomId, username } = data;
         if (!rooms[roomId]) return socket.emit('toast', '房間不存在');
@@ -32,7 +29,6 @@ io.on('connection', (socket) => {
         syncData(roomId);
     });
 
-    // 開始遊戲設定
     socket.on('start_game_with_settings', (data) => {
         const room = rooms[data.roomId];
         if (!room) return;
@@ -61,7 +57,6 @@ io.on('connection', (socket) => {
     }
 
     socket.on('draw_submit_word', (d) => { if(rooms[d.roomId]) rooms[d.roomId].currentWord = d.word; });
-    
     socket.on('draw_guess', (d) => {
         const room = rooms[d.roomId];
         if (room && d.guess.trim() === room.currentWord?.trim()) {
@@ -93,19 +88,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('draw_stroke', (d) => socket.to(d.roomId).emit('receive_stroke', d));
-    
-    socket.on('admin_login', (k) => { 
-        if(k === ADMIN_KEY) { 
-            socket.join('admin_group'); 
-            socket.emit('admin_auth_success'); 
-        } 
-    });
-
-    function syncData(rid) { 
-        if(rooms[rid]) io.to(rid).emit('room_update', { roomId: rid, players: rooms[rid].players, hostId: rooms[rid].host }); 
-    }
-
-    socket.on('disconnect', () => { /* 處理斷線邏輯 */ });
+    socket.on('admin_login', (k) => { if(k===ADMIN_KEY) { socket.join('admin_group'); socket.emit('admin_auth_success'); } });
+    function syncData(rid) { if(rooms[rid]) io.to(rid).emit('room_update', { roomId: rid, players: rooms[rid].players, hostId: rooms[rid].host }); }
 });
 
 const PORT = process.env.PORT || 3000;
