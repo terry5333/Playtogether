@@ -1,30 +1,129 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>Play Together</title>
-    </head>
-<body>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morandi 派對遊戲盒</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .bingo-cell { transition: all 0.2s; }
+        .bingo-cell:active { transform: scale(0.9); }
+        canvas { touch-action: none; } /* 防止手機繪圖時畫面捲動 */
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+    <div id="lobby" class="flex flex-col items-center justify-center min-h-screen p-4">
+        <div class="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md space-y-6">
+            <h1 class="text-3xl font-bold text-center text-slate-700">派對遊戲盒</h1>
+            <div class="space-y-4">
+                <input type="text" id="username" placeholder="你的暱稱" class="w-full p-4 border rounded-2xl focus:ring-2 focus:ring-blue-400 outline-none">
+                <input type="text" id="roomId" placeholder="房間號碼" class="w-full p-4 border rounded-2xl focus:ring-2 focus:ring-blue-400 outline-none">
+                <select id="gameSelect" class="w-full p-4 border rounded-2xl bg-white outline-none">
+                    <option value="bingo">賓果連連看</option>
+                    <option value="draw">你畫我猜</option>
+                    <option value="spy">誰是臥底</option>
+                </select>
+                <button onclick="confirmJoin()" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg transition">
+                    加入房間
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-area" class="hidden p-4 max-w-4xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h2 id="room-display" class="text-xl font-bold text-slate-600">房間：-</h2>
+            <button onclick="location.reload()" class="text-sm text-red-400">退出房間</button>
+        </div>
+
+        <div id="bingo-area" class="hidden space-y-4">
+            <div id="bingo-grid" class="grid grid-cols-5 gap-2 bg-white p-4 rounded-3xl shadow-inner border-8 border-slate-100">
+                </div>
+            <p class="text-center text-slate-400 text-sm">點擊格子填入數字 (1-25)</p>
+        </div>
+
+        <div id="draw-area" class="hidden flex flex-col items-center">
+            <canvas id="canvas" width="350" height="400" class="bg-white rounded-3xl shadow-lg border-4 border-white cursor-crosshair"></canvas>
+            <button onclick="clearCanvas()" class="mt-4 px-6 py-2 bg-slate-200 rounded-full text-slate-600">清除畫布</button>
+        </div>
+
+        <div id="spy-area" class="hidden bg-white p-10 rounded-3xl shadow-lg text-center">
+            <p class="text-slate-500 mb-4">等待房長開始遊戲...</p>
+        </div>
+
+        <div id="host-controls" class="hidden mt-10">
+            <button onclick="startGame()" class="w-full bg-orange-400 hover:bg-orange-500 text-white font-bold py-4 rounded-2xl shadow-lg transition">
+                開始遊戲 (僅房長)
+            </button>
+        </div>
+
+        <div class="mt-8">
+            <h3 class="text-sm font-bold text-slate-400 mb-2 uppercase tracking-widest">在線玩家</h3>
+            <div id="player-list" class="flex flex-wrap gap-2"></div>
+        </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
 
     <script>
-        const socket = io(); 
+        const socket = io(); // 定義全域 socket 供所有 js 使用
         let curRoom = "";
-        let isTurn = false;
+        let isHost = false;
 
         function confirmJoin() {
             const username = document.getElementById('username').value;
             const roomId = document.getElementById('roomId').value;
-            if(username && roomId) {
+            const gameType = document.getElementById('gameSelect').value;
+
+            if (username && roomId) {
                 curRoom = roomId;
-                socket.emit('join_room', { roomId, username });
+                document.getElementById('room-display').innerText = `房間：${roomId}`;
+                
+                // 發送加入房間訊號
+                socket.emit('join_room', { roomId, username, gameType });
+
+                // UI 切換
                 document.getElementById('lobby').classList.add('hidden');
                 document.getElementById('game-area').classList.remove('hidden');
-                // 延遲初始化，確保 DOM 已生成
-                setTimeout(() => {
-                    if(typeof initBingoBoard === 'function') initBingoBoard();
-                    if(typeof initDraw === 'function') initDraw();
-                }, 100);
+
+                // 根據遊戲類型顯示區域
+                if (gameType === 'bingo') {
+                    document.getElementById('bingo-area').classList.remove('hidden');
+                    if (typeof initBingoBoard === 'function') initBingoBoard(); //
+                } else if (gameType === 'draw') {
+                    document.getElementById('draw-area').classList.remove('hidden');
+                    if (typeof initDraw === 'function') initDraw(); //
+                } else if (gameType === 'spy') {
+                    document.getElementById('spy-area').classList.remove('hidden');
+                }
+            } else {
+                alert("請填寫暱稱與房間號碼");
+            }
+        }
+
+        function startGame() {
+            socket.emit('start_game', { roomId: curRoom });
+        }
+
+        // 監聽房間更新，確認房長權限
+        socket.on('room_update', (room) => {
+            isHost = (socket.id === room.host);
+            if (isHost && !room.gameStarted) {
+                document.getElementById('host-controls').classList.remove('hidden');
+            }
+            
+            const pList = document.getElementById('player-list');
+            pList.innerHTML = room.players.map(p => 
+                `<span class="px-4 py-1 bg-slate-200 rounded-full text-sm text-slate-600">${p.name} ${p.id === room.host ? '👑' : ''}</span>`
+            ).join('');
+        });
+
+        function clearCanvas() {
+            const canvas = document.getElementById('canvas');
+            if(canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
         }
     </script>
@@ -32,5 +131,6 @@
     <script src="bingo.js"></script>
     <script src="draw.js"></script>
     <script src="spy.js"></script>
+
 </body>
 </html>
