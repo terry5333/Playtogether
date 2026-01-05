@@ -2,52 +2,46 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>上帝視角 Admin</title>
+    <title>上帝視角 Admin Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
 </head>
-<body class="bg-slate-950 text-white p-8">
-    <div id="auth-view" class="max-w-md mx-auto mt-20 p-8 bg-slate-900 rounded-3xl border border-slate-800 text-center">
-        <h2 class="text-2xl font-bold mb-6 text-blue-500 tracking-widest">ADMIN LOGIN</h2>
-        <input type="password" id="input-key" placeholder="1010215" class="w-full bg-slate-800 p-4 rounded-xl mb-4 text-center outline-none">
-        <button id="btn-login" class="w-full bg-blue-600 p-4 rounded-xl font-bold">進入系統</button>
+<body class="bg-black text-white p-8">
+    <div id="auth-view" class="text-center mt-20">
+        <input type="password" id="key" placeholder="密鑰" class="bg-gray-900 p-4 rounded text-center">
+        <button onclick="socket.emit('admin_login', document.getElementById('key').value)" class="bg-blue-600 p-4 rounded">登入</button>
     </div>
 
     <div id="main-view" class="hidden">
-        <h1 class="text-3xl font-black text-blue-500 mb-8 tracking-tighter">實時監控控制台</h1>
-        <div id="room-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        <h1 class="text-2xl font-bold mb-6">實時房間管理員</h1>
+        <div id="room-list" class="grid gap-6"></div>
     </div>
 
     <script>
         const socket = io();
-        document.getElementById('btn-login').onclick = () => {
-            socket.emit('admin_login', document.getElementById('input-key').value);
-        };
-        socket.on('admin_auth_success', () => {
-            document.getElementById('auth-view').classList.add('hidden');
-            document.getElementById('main-view').classList.remove('hidden');
-        });
+        socket.on('admin_auth_success', () => { document.getElementById('auth-view').hidden = true; document.getElementById('main-view').classList.remove('hidden'); });
+
         socket.on('admin_monitor_update', (rooms) => {
             document.getElementById('room-list').innerHTML = rooms.map(room => `
-                <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800">
-                    <div class="flex justify-between items-center mb-4 pb-2 border-b border-white/5">
-                        <h3 class="font-bold text-blue-400 font-mono">房號: #${room.id}</h3>
-                        <span class="text-[10px] text-slate-500">${room.gameType}</span>
+                <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+                    <div class="flex justify-between mb-4">
+                        <h2 class="font-bold text-xl text-blue-400">#${room.id} (${room.gameType})</h2>
+                        <button onclick="socket.emit('admin_close_room', '${room.id}')" class="bg-red-600 px-3 py-1 rounded text-xs">關閉房間</button>
                     </div>
-                    <div class="space-y-2 text-[10px]">
+                    <div class="space-y-4">
                         ${room.players.map(p => `
-                            <div class="bg-slate-800 p-2 rounded">
-                                <b>${p.name}</b> (分:${p.score}) | 
-                                <span class="text-green-500">${p.role || '大廳'}</span> | 
-                                <span class="text-orange-400">${p.word || '無'}</span>
+                            <div class="bg-gray-800 p-3 rounded-xl flex justify-between items-center">
+                                <div>
+                                    <div class="font-bold">${p.name} (分: ${p.score})</div>
+                                    <div class="text-[10px] text-gray-500">賓果卡: ${p.bingoBoard.slice(0,5).join(',')}...</div>
+                                </div>
+                                <button onclick="socket.emit('admin_kick', {roomId:'${room.id}', playerId:'${p.id}'})" class="text-red-400 text-xs">踢出</button>
                             </div>
                         `).join('')}
                     </div>
-                    ${room.currentWord ? `<div class="mt-4 p-2 bg-orange-900/20 text-orange-400 rounded text-center">答案：${room.currentWord}</div>` : ''}
                 </div>
             `).join('');
         });
-        socket.on('toast', m => alert(m));
     </script>
 </body>
 </html>
