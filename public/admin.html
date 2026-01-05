@@ -1,57 +1,40 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <meta charset="UTF-8">
-    <title>管理後台</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-900 text-slate-100 p-8 font-sans">
-    <div id="auth" class="max-w-sm mx-auto mt-20 text-center space-y-4">
-        <h1 class="text-2xl font-bold text-blue-400">ADMIN SYSTEM</h1>
-        <input type="password" id="key" placeholder="輸入密鑰" class="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none">
-        <button onclick="load()" class="w-full bg-blue-600 p-4 rounded-2xl font-bold">進入監控</button>
+<head><meta charset="UTF-8"><title>Admin</title><script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-slate-900 text-white p-8">
+    <div id="auth" class="max-w-xs mx-auto mt-20 space-y-4">
+        <input type="password" id="pw" placeholder="Admin Key" class="w-full p-4 bg-slate-800 rounded-xl">
+        <button onclick="refresh()" class="w-full bg-blue-600 p-4 rounded-xl font-bold">登入監控</button>
     </div>
-
-    <div id="content" class="hidden">
-        <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-black">伺服器監控室</h1>
-            <button onclick="load()" class="bg-slate-700 px-4 py-2 rounded-lg text-xs">手動刷新</button>
-        </div>
-        <div class="grid gap-4" id="room-list"></div>
+    <div id="main" class="hidden space-y-4">
+        <h1 class="text-2xl font-bold">運行中房間</h1>
+        <div id="list" class="grid gap-4"></div>
     </div>
-
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let currentKey = "";
-        async function load() {
-            const key = document.getElementById('key').value;
-            const res = await fetch(`/admin-data?key=${key}`);
+        async function refresh() {
+            const key = document.getElementById('pw').value;
+            const res = await fetch('/admin-api?key='+key);
             if(res.ok) {
-                currentKey = key;
                 document.getElementById('auth').classList.add('hidden');
-                document.getElementById('content').classList.remove('hidden');
-                const data = await res.json();
-                document.getElementById('room-list').innerHTML = data.rooms.map(r => `
-                    <div class="bg-slate-800 p-6 rounded-3xl border border-slate-700 flex justify-between items-center">
+                document.getElementById('main').classList.remove('hidden');
+                const rooms = await res.json();
+                document.getElementById('list').innerHTML = Object.entries(rooms).map(([id, r]) => `
+                    <div class="bg-slate-800 p-4 rounded-2xl flex justify-between items-center">
                         <div>
-                            <span class="text-xs text-slate-500">房號: ${r.id} | 模式: ${r.gameType}</span>
-                            <h3 class="text-xl font-bold">${r.hostName} 的房間 (${r.playerCount} 人)</h3>
-                            <p class="text-sm text-slate-400">成員: ${r.players}</p>
+                            <p class="text-blue-400 font-bold">房號: ${id}</p>
+                            <p class="text-xs text-slate-400">遊戲: ${r.gameType || '未選'} | 人數: ${r.players.length}</p>
                         </div>
-                        <div class="flex items-center gap-4">
-                            <span class="text-xs font-bold text-green-500">${r.started}</span>
-                            <button onclick="closeRoom('${r.id}')" class="text-red-500 font-bold hover:underline">強制關閉</button>
-                        </div>
+                        <button onclick="closeRoom('${id}')" class="text-red-500 font-bold">強制解散</button>
                     </div>
                 `).join('');
-            } else alert("密鑰錯誤");
+            }
         }
         function closeRoom(id) {
-            if(confirm("確定要強制關閉房號 " + id + " 嗎？")) {
-                socket.emit('admin_close_room', { key: currentKey, targetRoomId: id });
-                setTimeout(load, 500);
-            }
+            const key = document.getElementById('pw').value;
+            socket.emit('admin_close', { key, targetId: id });
+            setTimeout(refresh, 500);
         }
     </script>
 </body>
