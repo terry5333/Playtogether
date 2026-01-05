@@ -12,7 +12,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 let rooms = {};
 
 io.on('connection', (socket) => {
-    // --- Admin 管理端指令 ---
+    // Admin 刷新與管理
     socket.on('admin_refresh', () => {
         const data = Object.keys(rooms).map(rid => ({
             id: rid,
@@ -37,7 +37,7 @@ io.on('connection', (socket) => {
         delete rooms[rid];
     });
 
-    // --- 玩家端指令 (保持原有邏輯並修復 Bingo) ---
+    // 創建房間：確保一定會回傳 room_created
     socket.on('create_room', () => {
         const rid = Math.floor(1000 + Math.random() * 9000).toString();
         rooms[rid] = { host: socket.id, players: [], bingoMarked: [], bingoGoal: 3, gameType: 'Lobby' };
@@ -47,6 +47,7 @@ io.on('connection', (socket) => {
     socket.on('join_room', (d) => {
         if (!rooms[d.roomId]) return socket.emit('toast', '房間不存在');
         socket.join(d.roomId);
+        socket.roomId = d.roomId;
         rooms[d.roomId].players.push({ id: socket.id, name: d.username });
         io.to(d.roomId).emit('room_update', { roomId: d.roomId, players: rooms[d.roomId].players, hostId: rooms[d.roomId].host });
     });
@@ -68,6 +69,14 @@ io.on('connection', (socket) => {
             io.to(d.roomId).emit('bingo_sync', { marked: r.bingoMarked });
         }
     });
+
+    socket.on('disconnect', () => {
+        if (socket.roomId && rooms[socket.roomId]) {
+            rooms[socket.roomId].players = rooms[socket.roomId].players.filter(p => p.id !== socket.id);
+            if (rooms[socket.roomId].players.length === 0) delete rooms[socket.roomId];
+            else io.to(socket.roomId).emit('room_update', { roomId: socket.roomId, players: rooms[socket.roomId].players, hostId: rooms[socket.roomId].host });
+        }
+    });
 });
 
-server.listen(process.env.PORT || 3000);
+server.listen(process.env.PORT || 3000, '0.0.0.0');
