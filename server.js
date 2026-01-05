@@ -1,183 +1,112 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PartyBox Ultimate</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/socket.io/socket.io.js"></script>
-    <style>
-        body { background: #020617; color: white; min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
-        .glass { background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); width: 92vw; max-width: 400px; padding: 2rem; border-radius: 2.5rem; border: 1px solid rgba(255,255,255,0.1); text-align: center; position: relative; }
-        .hidden { display: none !important; }
-        
-        /* 解決手機點擊貼上與聚焦的核心 CSS */
-        input, textarea { 
-            position: relative; 
-            z-index: 50; 
-            user-select: text !important; 
-            -webkit-user-select: text !important;
-            touch-action: manipulation; 
-        }
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
 
-        canvas { 
-            background: white; 
-            border-radius: 1rem; 
-            width: 100%; 
-            aspect-ratio: 1/1; 
-            touch-action: none; /* 畫布禁用系統手勢防止干擾 */
-            position: relative;
-            z-index: 10;
-        }
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-        .bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
-        .bingo-cell { aspect-ratio: 1/1; background: #1e293b; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold; touch-action: manipulation; }
-        .filled { border: 2px solid #3b82f6; color: #3b82f6; }
-        .marked { background: #3b82f6 !important; color: white !important; }
-    </style>
-</head>
-<body>
-    <div id="toast" class="fixed top-5 left-1/2 -translate-x-1/2 p-3 rounded-xl bg-blue-600 opacity-0 transition-all z-[100] text-sm pointer-events-none"></div>
+// 設定靜態檔案目錄
+app.use(express.static(path.join(__dirname, 'public')));
 
-    <section id="view-login" class="glass space-y-4">
-        <h1 class="text-4xl font-black italic mb-6">PARTY<span class="text-blue-500">BOX</span></h1>
-        <input id="in-name" type="text" placeholder="你的暱稱" class="w-full bg-slate-800 p-4 rounded-xl text-center outline-none focus:ring-2 ring-blue-500 text-white">
-        <button onclick="createRoom()" class="w-full bg-blue-600 p-4 rounded-xl font-bold active:scale-95 transition">創建房間</button>
-        <div class="flex gap-2">
-            <input id="in-room" type="number" placeholder="房號" class="w-2/3 bg-slate-800 p-4 rounded-xl text-center outline-none text-white">
-            <button onclick="joinRoom()" class="w-1/3 bg-slate-700 p-4 rounded-xl font-bold active:scale-95 transition">加入</button>
-        </div>
-    </section>
+let rooms = {};
+const ADMIN_KEY = "1010215";
 
-    <section id="view-lobby" class="hidden glass space-y-6">
-        <h2 id="lab-room" class="text-5xl font-mono text-blue-400">----</h2>
-        <div id="player-list" class="flex flex-wrap gap-2 justify-center"></div>
-        <div id="host-zone" class="hidden space-y-2 pt-4 border-t border-white/10">
-            <button onclick="openSettings('draw')" class="w-full bg-orange-600 p-3 rounded-xl font-bold">你話我猜</button>
-            <button onclick="openSettings('spy')" class="w-full bg-green-600 p-3 rounded-xl font-bold">誰是臥底</button>
-            <button onclick="openSettings('bingo')" class="w-full bg-purple-600 p-3 rounded-xl font-bold">數字賓果</button>
-        </div>
-    </section>
+io.on('connection', (socket) => {
+    // 創建房間
+    socket.on('create_room', () => {
+        const roomId = Math.floor(1000 + Math.random() * 9000).toString();
+        rooms[roomId] = { host: socket.id, players: [], gameType: "大廳", turnIdx: 0, currentRound: 1, totalRounds: 1, bingoMarked: [] };
+        socket.emit('room_created', { roomId });
+    });
 
-    <section id="view-draw" class="hidden glass space-y-2">
-        <div id="draw-info" class="text-xs font-bold text-orange-400 py-1">準備中...</div>
-        <canvas id="canvas" width="300" height="300"></canvas>
-        <div id="draw-ctrl" class="hidden space-y-2">
-            <input id="draw-word" type="text" placeholder="你要畫什麼？" class="w-full bg-slate-800 p-3 rounded-xl text-center text-white">
-            <button onclick="submitWord()" class="w-full bg-blue-600 p-3 rounded-xl font-bold">設定題目</button>
-        </div>
-        <div id="guess-ctrl" class="space-y-2">
-            <input id="guess-input" type="text" placeholder="猜一個詞..." class="w-full bg-slate-800 p-3 rounded-xl text-center text-white">
-            <button onclick="submitGuess()" class="w-full bg-green-600 p-3 rounded-xl font-bold">送出</button>
-        </div>
-    </section>
+    // 加入房間
+    socket.on('join_room', (data) => {
+        const { roomId, username } = data;
+        if (!rooms[roomId]) return socket.emit('toast', '房間不存在');
+        socket.join(roomId);
+        socket.roomId = roomId;
+        socket.username = username;
+        rooms[roomId].players.push({ id: socket.id, name: username, score: 0, ready: false });
+        syncData(roomId);
+    });
 
-    <section id="view-bingo" class="hidden glass space-y-4">
-        <h2 id="bingo-status" class="text-purple-400 font-bold">依序點擊空格填充 1-25</h2>
-        <div id="bingo-board" class="bingo-grid"></div>
-        <button id="bingo-ready-btn" onclick="bingoReady()" class="w-full bg-purple-600 p-3 rounded-xl font-bold opacity-30 pointer-events-none">請填滿格子</button>
-    </section>
+    // 開始遊戲設定
+    socket.on('start_game_with_settings', (data) => {
+        const room = rooms[data.roomId];
+        if (!room) return;
+        room.gameType = data.gameType;
+        room.totalRounds = parseInt(data.settings.rounds) || 1;
+        room.turnIdx = 0; room.currentRound = 1;
+        room.players.forEach(p => { p.score = 0; p.ready = false; });
 
-    <section id="view-spy" class="hidden glass space-y-6">
-        <h3 id="spy-word" class="text-5xl font-black py-10">---</h3>
-        <p class="text-slate-500 text-xs">記住你的詞語，開始描述！</p>
-    </section>
-
-    <div id="view-over" class="hidden glass space-y-4">
-        <h2 class="text-3xl font-black text-yellow-500 italic">RANKING</h2>
-        <div id="final-scores" class="space-y-2 text-sm"></div>
-        <button onclick="location.reload()" class="w-full bg-slate-700 p-4 rounded-xl font-bold mt-4">返回主頁</button>
-    </div>
-
-    <script>
-        const socket = io();
-        let myRoom, myName, isGaming = false, nextBingoNum = 1, myBingo = Array(25).fill(null), drawing = false;
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-
-        function v(id) { document.querySelectorAll('section, #view-over').forEach(s => s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
-        function showToast(m, c) { const t = document.getElementById('toast'); t.innerText = m; t.style.background = c; t.style.opacity = 1; setTimeout(()=>t.style.opacity=0, 2000); }
-
-        function createRoom() { myName = document.getElementById('in-name').value; if(myName) socket.emit('create_room'); }
-        function joinRoom() { myName = document.getElementById('in-name').value; myRoom = document.getElementById('in-room').value; if(myName && myRoom) socket.emit('join_room', {roomId: myRoom, username: myName}); }
-        
-        socket.on('room_created', d => { myRoom = d.roomId; socket.emit('join_room', {roomId: d.roomId, username: myName}); });
-        socket.on('room_update', d => { if(!isGaming) v('view-lobby'); document.getElementById('lab-room').innerText = d.roomId; document.getElementById('host-zone').classList.toggle('hidden', socket.id !== d.hostId); document.getElementById('player-list').innerHTML = d.players.map(p => `<span class="bg-slate-800 px-3 py-1 rounded-full text-xs">${p.name}</span>`).join(''); });
-
-        function openSettings(mode) {
-            let r = (mode === 'draw') ? prompt("遊玩幾輪？", "1") : 1;
-            socket.emit('start_game_with_settings', {roomId: myRoom, gameType: mode, settings: {rounds: r}});
-        }
-
-        socket.on('game_begin', d => {
-            isGaming = true;
-            if(d.gameType === 'draw') {
-                v('view-draw');
-                const isD = (socket.id === d.drawerId);
-                document.getElementById('draw-info').innerText = isD ? `輪到你了 (${d.roundInfo})` : `畫家：${d.drawerName} (${d.roundInfo})`;
-                document.getElementById('draw-ctrl').classList.toggle('hidden', !isD);
-                document.getElementById('guess-ctrl').classList.toggle('hidden', isD);
-                ctx.clearRect(0, 0, 300, 300);
-            } else if(d.gameType === 'spy') {
-                v('view-spy'); document.getElementById('spy-word').innerText = d.word;
-            } else if(d.gameType === 'bingo_prepare') {
-                v('view-bingo'); initBingoPrepare();
-            }
-        });
-
-        // 賓果自動填數邏輯
-        function initBingoPrepare() {
-            nextBingoNum = 1; myBingo = Array(25).fill(null);
-            const b = document.getElementById('bingo-board'); b.innerHTML = "";
-            const btn = document.getElementById('bingo-ready-btn');
-            btn.classList.add('opacity-30', 'pointer-events-none');
-            for(let i=0; i<25; i++) {
-                let c = document.createElement('div'); c.className = "bingo-cell";
-                c.onclick = () => {
-                    if(myBingo[i] === null) {
-                        c.innerText = nextBingoNum; c.classList.add('filled');
-                        myBingo[i] = nextBingoNum; nextBingoNum++;
-                        if(nextBingoNum > 25) btn.classList.remove('opacity-30', 'pointer-events-none');
-                    }
-                };
-                b.appendChild(c);
-            }
-        }
-        function bingoReady() { socket.emit('bingo_ready', {roomId: myRoom, board: myBingo}); document.getElementById('bingo-status').innerText = "等待他人..."; }
-
-        socket.on('bingo_start', d => {
-            document.getElementById('bingo-status').innerText = `輪到：${d.turnName} 叫號`;
-            Array.from(document.getElementById('bingo-board').children).forEach((c, i) => {
-                if(d.marked.includes(myBingo[i])) c.classList.add('marked');
-                c.onclick = () => { if(socket.id === d.turnId && !c.classList.contains('marked')) socket.emit('bingo_pick', {roomId: myRoom, num: myBingo[i]}); };
+        if (data.gameType === 'draw') sendDrawTurn(data.roomId);
+        else if (data.gameType === 'spy') {
+            const pairs = [["西瓜", "香瓜"], ["原子筆", "鉛筆"], ["火鍋", "烤肉"]];
+            const pair = pairs[Math.floor(Math.random()*pairs.length)];
+            const spyIdx = Math.floor(Math.random() * room.players.length);
+            room.players.forEach((p, idx) => {
+                io.to(p.id).emit('game_begin', { gameType: 'spy', word: idx === spyIdx ? pair[1] : pair[0] });
             });
-        });
+        }
+        else if (data.gameType === 'bingo') io.to(data.roomId).emit('game_begin', { gameType: 'bingo_prepare' });
+    });
 
-        // 核心修正：觸控與繪圖判斷
-        canvas.ontouchstart = (e) => { 
-            if(document.getElementById('draw-ctrl').classList.contains('hidden')) return;
-            drawing = true; ctx.beginPath(); 
-            const pos = e.touches[0];
-            const rect = canvas.getBoundingClientRect();
-            ctx.moveTo((pos.clientX - rect.left) * (300/rect.width), (pos.clientY - rect.top) * (300/rect.height));
-        };
-        canvas.ontouchmove = (e) => {
-            if(!drawing) return;
-            e.preventDefault(); // 只有在畫布畫畫時才阻止頁面滾動
-            const pos = e.touches[0];
-            const rect = canvas.getBoundingClientRect();
-            const x = (pos.clientX - rect.left) * (300 / rect.width);
-            const y = (pos.clientY - rect.top) * (300 / rect.height);
-            ctx.lineTo(x, y); ctx.strokeStyle = "#000"; ctx.lineWidth = 3; ctx.stroke();
-            socket.emit('draw_stroke', {roomId: myRoom, x, y});
-        };
-        window.ontouchend = () => drawing = false;
-        socket.on('receive_stroke', d => { ctx.lineTo(d.x, d.y); ctx.stroke(); });
+    function sendDrawTurn(roomId) {
+        const room = rooms[roomId];
+        if (room.currentRound > room.totalRounds) return io.to(roomId).emit('game_over', { scores: room.players.sort((a,b)=>b.score-a.score) });
+        const drawer = room.players[room.turnIdx];
+        io.to(roomId).emit('game_begin', { gameType: 'draw', drawerId: drawer.id, drawerName: drawer.name, roundInfo: `第 ${room.currentRound}/${room.totalRounds} 輪` });
+    }
 
-        function submitWord() { socket.emit('draw_submit_word', {roomId: myRoom, word: document.getElementById('draw-word').value}); document.getElementById('draw-ctrl').classList.add('hidden'); }
-        function submitGuess() { socket.emit('draw_guess', {roomId: myRoom, guess: document.getElementById('guess-input').value}); document.getElementById('guess-input').value=""; }
-        socket.on('game_over', d => { v('view-over'); document.getElementById('final-scores').innerHTML = d.scores.map((p, i) => `<div class="flex justify-between p-2 bg-slate-800 rounded"><span>${i+1}. ${p.name}</span><b>${p.score} pts</b></div>`).join(''); });
-        socket.on('toast', (m, c) => showToast(m, c));
-    </script>
-</body>
-</html>
+    socket.on('draw_submit_word', (d) => { if(rooms[d.roomId]) rooms[d.roomId].currentWord = d.word; });
+    
+    socket.on('draw_guess', (d) => {
+        const room = rooms[d.roomId];
+        if (room && d.guess.trim() === room.currentWord?.trim()) {
+            room.players.find(p => p.id === socket.id).score += 2;
+            room.turnIdx++;
+            if (room.turnIdx >= room.players.length) { room.turnIdx = 0; room.currentRound++; }
+            io.to(d.roomId).emit('toast', `${socket.username} 答對了！`, '#16a34a');
+            setTimeout(() => sendDrawTurn(d.roomId), 1500);
+        }
+    });
+
+    socket.on('bingo_ready', (d) => {
+        const room = rooms[d.roomId];
+        const p = room.players.find(p => p.id === socket.id);
+        if(p) { p.ready = true; p.bingoBoard = d.board; }
+        if (room.players.every(pl => pl.ready)) { room.turnIdx = 0; room.bingoMarked = []; sendBingoTurn(d.roomId); }
+    });
+
+    function sendBingoTurn(roomId) {
+        const room = rooms[roomId];
+        io.to(roomId).emit('bingo_start', { turnName: room.players[room.turnIdx].name, turnId: room.players[room.turnIdx].id, marked: room.bingoMarked });
+    }
+
+    socket.on('bingo_pick', (d) => {
+        const room = rooms[d.roomId];
+        room.bingoMarked.push(parseInt(d.num));
+        room.turnIdx = (room.turnIdx + 1) % room.players.length;
+        sendBingoTurn(d.roomId);
+    });
+
+    socket.on('draw_stroke', (d) => socket.to(d.roomId).emit('receive_stroke', d));
+    
+    socket.on('admin_login', (k) => { 
+        if(k === ADMIN_KEY) { 
+            socket.join('admin_group'); 
+            socket.emit('admin_auth_success'); 
+        } 
+    });
+
+    function syncData(rid) { 
+        if(rooms[rid]) io.to(rid).emit('room_update', { roomId: rid, players: rooms[rid].players, hostId: rooms[rid].host }); 
+    }
+
+    socket.on('disconnect', () => { /* 處理斷線邏輯 */ });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
