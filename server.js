@@ -13,9 +13,10 @@ let rooms = {};
 const ADMIN_KEY = "1010215";
 
 io.on('connection', (socket) => {
+    // 基礎房務
     socket.on('create_room', () => {
         const roomId = Math.floor(1000 + Math.random() * 9000).toString();
-        rooms[roomId] = { host: socket.id, players: [], gameType: "大廳", currentWord: "", turnIdx: 0 };
+        rooms[roomId] = { host: socket.id, players: [], gameType: "大廳", currentWord: "", turnIdx: 0, settings: {} };
         socket.emit('room_created', { roomId });
     });
 
@@ -25,37 +26,32 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         socket.roomId = roomId;
         socket.username = username;
-        if (!rooms[roomId].players.find(p => p.id === socket.id)) {
-            rooms[roomId].players.push({ id: socket.id, name: username, score: 0, role: "", word: "" });
-        }
+        rooms[roomId].players.push({ id: socket.id, name: username, score: 0, bingoBoard: [], startTime: 0 });
         syncData(roomId);
     });
 
-    socket.on('start_game', (data) => {
+    // 房主啟動遊戲並發送設定
+    socket.on('start_game_with_settings', (data) => {
         const room = rooms[data.roomId];
         if (!room || room.host !== socket.id) return;
         room.gameType = data.gameType;
+        room.settings = data.settings;
+        room.turnIdx = 0;
 
         if (data.gameType === 'draw') {
             sendDrawTurn(data.roomId);
-        } else if (data.gameType === 'spy') {
-            const pair = [["原子筆", "鉛筆"], ["西瓜", "香瓜"], ["烤肉", "火鍋"]][Math.floor(Math.random()*3)];
-            const spyIdx = Math.floor(Math.random() * room.players.length);
-            room.players.forEach((p, idx) => {
-                p.role = (idx === spyIdx ? "臥底" : "平民");
-                p.word = (idx === spyIdx ? pair[1] : pair[0]);
-                io.to(p.id).emit('game_begin', { gameType: 'spy', word: p.word });
-            });
         } else {
-            io.to(data.roomId).emit('game_begin', { gameType: data.gameType });
+            io.to(data.roomId).emit('game_begin', { gameType: data.gameType, settings: data.settings });
         }
-        sendAdminUpdate(); // 僅通知管理員遊戲開始，不觸發玩家 room_update 以免閃退
+        sendAdminUpdate();
     });
 
+    // 你話我猜：階梯加分邏輯
     function sendDrawTurn(roomId) {
         const room = rooms[roomId];
         const drawer = room.players[room.turnIdx];
-        room.currentWord = ""; 
+        room.currentWord = "";
+        room.drawStartTime = Date.now(); // 記錄開始時間
         io.to(roomId).emit('game_begin', { 
             gameType: 'draw', drawerId: drawer.id, drawerName: drawer.name,
             scores: room.players.map(p => ({name: p.name, score: p.score})) 
@@ -63,47 +59,68 @@ io.on('connection', (socket) => {
     }
 
     socket.on('draw_submit_word', (data) => {
-        if(rooms[data.roomId]) rooms[data.roomId].currentWord = data.word;
-        io.to(data.roomId).emit('toast', '畫家已出題！', '#3b82f6');
-        sendAdminUpdate();
+        const room = rooms[data.roomId];
+        room.currentWord = data.word;
+        room.drawStartTime = Date.now(); // 畫家送出題目後重新計時
+        io.to(data.roomId).emit('toast', '題目已設定，開始計時！', '#3b82f6');
     });
 
     socket.on('draw_guess', (data) => {
         const room = rooms[data.roomId];
-        if (!room || room.currentWord === "") return;
-        if (data.guess.trim() === room.currentWord.trim()) {
+        if (data.guess.trim() === room.currentWord.trim() && room.currentWord !== "") {
+            const elapsed = (Date.now() - room.drawStartTime) / 1000;
+            let points = 1;
+            if (elapsed <= 60) points = 3;
+            else if (elapsed <= 120) points = 2;
+
             const winner = room.players.find(p => p.id === socket.id);
-            const drawer = room.players[room.turnIdx];
-            if (winner) winner.score += 10;
-            if (drawer) drawer.score += 5;
-            io.to(data.roomId).emit('toast', `${socket.username} 答對了！`, '#16a34a');
+            if (winner) winner.score += points;
+            
+            io.to(data.roomId).emit('toast', `${socket.username} 答對了！(+${points}分)`, '#16a34a');
+            
+            // 換下一位
             room.turnIdx = (room.turnIdx + 1) % room.players.length;
             setTimeout(() => sendDrawTurn(data.roomId), 2000);
-            sendAdminUpdate();
+            syncData(data.roomId);
         }
     });
 
-    socket.on('draw_stroke', (d) => socket.to(d.roomId).emit('receive_stroke', d));
+    // 賓果同步 (管理員查看用)
+    socket.on('sync_bingo', (data) => {
+        const room = rooms[data.roomId];
+        const p = room.players.find(p => p.id === socket.id);
+        if (p) p.bingoBoard = data.board;
+        sendAdminUpdate();
+    });
 
-    socket.on('admin_login', (key) => {
-        if (key === ADMIN_KEY) {
-            socket.join('admin_group');
-            socket.emit('admin_auth_success');
-            sendAdminUpdate();
-        } else { socket.emit('toast', '密鑰錯誤！'); }
+    // 管理員權限
+    socket.on('admin_kick', (data) => {
+        const room = rooms[data.roomId];
+        if (room) {
+            io.to(data.playerId).emit('toast', '你已被管理員踢出');
+            io.sockets.sockets.get(data.playerId)?.leave(data.roomId);
+            room.players = room.players.filter(p => p.id !== data.playerId);
+            syncData(data.roomId);
+        }
+    });
+
+    socket.on('admin_close_room', (rid) => {
+        io.to(rid).emit('toast', '房間已被管理員關閉');
+        delete rooms[rid];
+        sendAdminUpdate();
     });
 
     function syncData(rid) {
         if(!rooms[rid]) return;
         io.to(rid).emit('room_update', { roomId: rid, players: rooms[rid].players, hostId: rooms[rid].host });
-        sendAdminUpdate();
     }
 
     function sendAdminUpdate() {
-        const all = Object.keys(rooms).map(id => ({
-            id, gameType: rooms[id].gameType, currentWord: rooms[id].currentWord, players: rooms[id].players
-        }));
-        io.to('admin_group').emit('admin_monitor_update', all);
+        io.to('admin_group').emit('admin_monitor_update', Object.values(rooms));
     }
+
+    socket.on('admin_login', (key) => {
+        if (key === ADMIN_KEY) { socket.join('admin_group'); socket.emit('admin_auth_success'); sendAdminUpdate(); }
+    });
 });
 server.listen(3000);
