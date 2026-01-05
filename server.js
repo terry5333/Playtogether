@@ -70,3 +70,39 @@ io.on('connection', (socket) => {
 // 輔助函式：切換回合與遊戲細節
 function nextTurn(roomId) { /* 切換 index 並 emit next_turn */ }
 function startSpyGame(roomId, time) { /* 分配詞彙並啟動計時器 */ }
+const ADMIN_PASSWORD = "bitch12345"; // 建議修改
+
+// 提供管理員獲取所有房間即時數據
+app.get('/admin/data', (req, res) => {
+    const { key } = req.query;
+    if (key !== ADMIN_PASSWORD) return res.status(403).send("密鑰錯誤");
+
+    const roomStats = Object.entries(rooms).map(([id, data]) => ({
+        roomId: id,
+        gameType: data.gameType || "未選擇",
+        playerCount: data.players.length,
+        hostName: data.players.find(p => p.id === data.host)?.name || "未知",
+        players: data.players.map(p => p.name),
+        gameStarted: data.gameStarted,
+        createdAt: data.createdAt // 可以在 join_room 時建立時間戳
+    }));
+
+    res.json(roomStats);
+});
+
+// 管理員強制指令
+io.on('connection', (socket) => {
+    socket.on('admin_command', (data) => {
+        if (data.key !== ADMIN_PASSWORD) return;
+
+        if (data.type === 'DELETE_ROOM') {
+            io.to(data.targetId).emit('force_exit', { reason: "管理員已解散此房間" });
+            delete rooms[data.targetId];
+            io.emit('admin_update'); // 通知管理員頁面重新刷新
+        }
+        
+        if (data.type === 'ANNOUNCEMENT') {
+            io.emit('global_msg', { content: data.content }); // 全服公告
+        }
+    });
+});
