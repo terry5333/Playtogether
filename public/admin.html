@@ -2,43 +2,54 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>PartyBox Admin</title>
+    <title>PartyBox Admin 數據中心</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
-<body class="bg-gray-100 p-8">
-    <h1 class="text-3xl font-black mb-6 text-gray-800">後台數據監控</h1>
-    <div id="room-list" class="grid gap-4"></div>
-
+<body class="bg-slate-50 p-6">
+    <div class="max-w-6xl mx-auto space-y-6">
+        <h1 class="text-3xl font-black">管理後台 📊</h1>
+        <div class="grid md:grid-cols-3 gap-6">
+            <div class="md:col-span-1 space-y-4">
+                <h2 class="font-bold text-slate-400 uppercase text-sm">活躍房間</h2>
+                <div id="room-list" class="space-y-3"></div>
+            </div>
+            <div class="md:col-span-2 space-y-4">
+                <h2 class="font-bold text-slate-400 uppercase text-sm">歷史戰績 (最近50筆)</h2>
+                <div class="bg-white rounded-3xl shadow-sm border overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-100 text-xs">
+                            <tr>
+                                <th class="p-4">時間</th>
+                                <th class="p-4">遊戲</th>
+                                <th class="p-4">贏家</th>
+                                <th class="p-4">房號 / 詳情</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-body" class="text-sm divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
     <script>
         const socket = io();
-        
-        // 一連線就告訴後端：我是 Admin，給我數據
-        socket.on('connect', () => {
-            console.log("Admin Connected");
-            socket.emit('admin_init');
-        });
-
-        socket.on('admin_data_update', (rooms) => {
-            console.log("Received Data:", rooms);
-            const list = document.getElementById('room-list');
-            if(rooms.length === 0) {
-                list.innerHTML = `<p class="text-gray-400">目前沒有運作中的房間</p>`;
-                return;
-            }
-            list.innerHTML = rooms.map(r => `
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-200">
-                    <div class="flex justify-between font-bold text-lg mb-2">
-                        <span>房號: ${r.id}</span>
-                        <span class="text-blue-500">${r.game}</span>
-                    </div>
-                    <div class="text-sm text-gray-500 mb-4">房主: ${r.host}</div>
-                    <div class="flex flex-wrap gap-2">
-                        ${r.players.map(p => `
-                            <span class="px-3 py-1 bg-gray-100 rounded-full text-xs font-bold">${p.name}</span>
-                        `).join('')}
-                    </div>
+        socket.on('connect', () => socket.emit('admin_init'));
+        socket.on('admin_data_update', (data) => {
+            document.getElementById('room-list').innerHTML = data.rooms.map(r => `
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-blue-100">
+                    <div class="flex justify-between font-black text-blue-500 mb-1"><span>房號 ${r.id}</span><span class="text-xs bg-blue-50 px-2 rounded">${r.game}</span></div>
+                    <div class="text-[10px] text-slate-400 mb-2">房主: ${r.host}</div>
+                    <div class="flex flex-wrap gap-1">${r.players.map(p => `<span class="bg-slate-100 px-2 py-0.5 rounded text-[10px]">${p.name}</span>`).join('')}</div>
                 </div>
+            `).join('');
+            document.getElementById('history-body').innerHTML = data.history.map(h => `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-4 text-slate-400 font-mono text-xs">${h.time}</td>
+                    <td class="p-4 font-bold text-slate-700">${h.gameType}</td>
+                    <td class="p-4 font-black text-blue-600">👑 ${h.winner}</td>
+                    <td class="p-4 text-slate-400 text-xs">${h.detail} (Room:${h.roomId})</td>
+                </tr>
             `).join('');
         });
     </script>
