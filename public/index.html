@@ -3,118 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PARTY BOX 修正版</title>
+    <title>PARTY BOX 旗艦版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: white; font-family: sans-serif; }
-        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        body { background-color: #0f172a; color: white; font-family: sans-serif; touch-action: manipulation; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
         .hidden { display: none !important; }
-        .btn-primary { background: #3b82f6; width: 100%; padding: 1rem; border-radius: 1rem; font-weight: bold; }
-        .btn-secondary { background: #334155; width: 100%; padding: 1rem; border-radius: 1rem; font-weight: bold; }
+        .bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+        .bingo-cell { aspect-ratio: 1/1; background: #1e293b; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid transparent; cursor: pointer; }
+        .bingo-cell.active { border-color: #3b82f6; background: #2563eb; }
+        .num-pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+        .num-btn { background: #334155; padding: 8px; border-radius: 6px; text-align: center; font-size: 14px; font-weight: bold; }
+        .num-btn.used { opacity: 0.2; pointer-events: none; }
     </style>
 </head>
 <body class="p-4">
 
-    <h1 id="admin-trigger" class="text-4xl font-black italic text-center my-10 cursor-pointer">PARTY<span class="text-blue-500">BOX</span></h1>
+    <h1 id="title" class="text-4xl font-black italic text-center my-8 cursor-pointer">PARTY<span class="text-blue-500">BOX</span></h1>
 
     <section id="view-login" class="max-w-md mx-auto space-y-4">
         <div class="glass p-6 rounded-3xl space-y-4">
-            <label class="block text-sm text-slate-400">第一步：給自己取個名字</label>
-            <input type="text" id="user-name" placeholder="你的暱稱" class="w-full bg-slate-800 p-4 rounded-xl outline-none border border-slate-700 focus:border-blue-500">
-            
-            <div id="action-buttons" class="space-y-3 pt-4">
-                <button onclick="handleAction('create')" class="btn-primary">創建新房間</button>
-                <div class="flex items-center gap-2">
-                    <input type="text" id="room-id-input" placeholder="輸入房號" class="flex-1 bg-slate-800 p-4 rounded-xl outline-none">
-                    <button onclick="handleAction('join')" class="bg-orange-600 px-6 py-4 rounded-xl font-bold">加入</button>
-                </div>
-            </div>
+            <input type="text" id="in-name" placeholder="輸入暱稱" class="w-full bg-slate-800 p-4 rounded-xl outline-none">
+            <div id="join-opt" class="hidden"><input type="text" id="in-room" placeholder="輸入房號" class="w-full bg-slate-800 p-4 rounded-xl outline-none mt-2"></div>
+            <button onclick="doAction('create')" id="btn-c" class="w-full bg-blue-600 p-4 rounded-xl font-bold">創建房間</button>
+            <button onclick="showJoin()" id="btn-j" class="w-full bg-slate-700 p-4 rounded-xl font-bold">加入房間</button>
+            <button onclick="doAction('join')" id="btn-ok" class="hidden w-full bg-green-600 p-4 rounded-xl font-bold">確認進入</button>
         </div>
     </section>
 
     <section id="view-lobby" class="hidden max-w-md mx-auto space-y-4">
         <div class="glass p-6 rounded-3xl text-center space-y-6">
-            <div class="flex justify-between items-center text-blue-400">
-                <span id="room-tag" class="font-black text-xl">房號：----</span>
-                <span id="player-count" class="text-sm">1 人在線</span>
+            <h2 id="lab-room" class="text-2xl font-black text-blue-400">房號：----</h2>
+            <div id="player-list" class="flex flex-wrap gap-2 justify-center"></div>
+            <div id="host-zone" class="hidden border-t border-slate-700 pt-4 space-y-2">
+                <button onclick="goConfig('bingo')" class="w-full bg-blue-900/50 p-3 rounded-xl border border-blue-500">賓果設定</button>
+                <button onclick="goConfig('draw')" class="w-full bg-orange-900/50 p-3 rounded-xl border border-orange-500">你話我猜設定</button>
             </div>
-            
-            <div id="player-list" class="flex flex-wrap gap-2 justify-center py-4">
-                </div>
-
-            <div id="host-controls" class="hidden border-t border-slate-700 pt-6 space-y-3">
-                <p class="text-xs text-slate-500 mb-2">你是房主，請選擇遊戲模式：</p>
-                <button onclick="alert('進入賓果設定')" class="btn-secondary border-l-4 border-blue-500">賓果連連看</button>
-                <button onclick="alert('進入臥底設定')" class="btn-secondary border-l-4 border-green-500">誰是臥底</button>
-                <button onclick="alert('進入畫畫設定')" class="btn-secondary border-l-4 border-orange-500">你畫我猜</button>
-            </div>
-            
             <p id="wait-msg" class="text-slate-500 animate-pulse">等待房主開始...</p>
         </div>
+    </section>
+
+    <section id="view-config" class="hidden max-w-md mx-auto">
+        <div class="glass p-6 rounded-3xl space-y-4">
+            <h2 id="cfg-title" class="text-xl font-bold">遊戲設定</h2>
+            <div id="cfg-content" class="space-y-4"></div>
+            <button onclick="startGame()" class="w-full bg-blue-600 p-4 rounded-xl font-bold">開始遊戲</button>
+        </div>
+    </section>
+
+    <section id="view-bingo" class="hidden max-w-md mx-auto space-y-4">
+        <div class="glass p-6 rounded-3xl">
+            <div id="bingo-board" class="bingo-grid mb-4"></div>
+            <div id="bingo-pad" class="num-pad"></div>
+            <button id="btn-b-ready" onclick="bReady()" class="hidden w-full bg-green-600 p-4 rounded-xl font-bold mt-4">準備完成</button>
+        </div>
+    </section>
+
+    <section id="view-admin" class="hidden fixed inset-0 bg-slate-950 z-[100] p-6 overflow-auto">
+        <div class="flex justify-between mb-4"><h2 class="text-red-500 font-bold">ADMIN PANEL</h2><button onclick="v('view-login')">關閉</button></div>
+        <input type="password" id="ad-pass" placeholder="KEY" class="w-full bg-slate-900 p-4 mb-4">
+        <button onclick="adAuth()" class="w-full bg-red-600 p-4 rounded-xl mb-6">驗證</button>
+        <div id="ad-list" class="space-y-4"></div>
     </section>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myName = "";
-        let myRoom = "";
+        let myName, myRoom, curCell = 0, bData = new Array(25).fill(null), tmpG = '', adKey = '';
 
-        // 核心按鈕邏輯
-        function handleAction(type) {
-            myName = document.getElementById('user-name').value.trim();
-            if (!myName) {
-                alert("請先輸入暱稱！");
-                return;
-            }
-
-            if (type === 'create') {
-                // 發送創建請求
-                socket.emit('create_room');
-            } else {
-                myRoom = document.getElementById('room-id-input').value.trim();
-                if (!myRoom) {
-                    alert("請輸入 4 位數房號！");
-                    return;
-                }
-                socket.emit('join_room', { roomId: myRoom, username: myName });
-            }
+        function v(id) { document.querySelectorAll('section').forEach(s => s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
+        function showJoin() { document.getElementById('join-opt').classList.remove('hidden'); document.getElementById('btn-ok').classList.remove('hidden'); document.getElementById('btn-c').classList.add('hidden'); document.getElementById('btn-j').classList.add('hidden'); }
+        
+        function doAction(t) {
+            myName = document.getElementById('in-name').value; if(!myName) return alert("暱稱？");
+            if(t === 'create') socket.emit('create_room');
+            else { myRoom = document.getElementById('in-room').value; socket.emit('join_room', { roomId: myRoom, username: myName }); }
         }
 
-        // 伺服器回傳：房間創建成功
-        socket.on('room_created', (data) => {
-            myRoom = data.roomId;
-            // 創建完自動加入
-            socket.emit('join_room', { roomId: myRoom, username: myName });
+        socket.on('room_created', d => { myRoom = d.roomId; socket.emit('join_room', { roomId: myRoom, username: myName }); });
+        socket.on('room_update', d => {
+            v('view-lobby'); document.getElementById('lab-room').innerText = "房號："+d.roomId;
+            const isH = socket.id === d.hostId;
+            document.getElementById('host-zone').classList.toggle('hidden', !isH);
+            document.getElementById('wait-msg').classList.toggle('hidden', isH);
+            document.getElementById('player-list').innerHTML = d.players.map(p => `<span class="bg-slate-800 px-3 py-1 rounded-full text-xs">${p.id === d.hostId ? '⭐' : ''}${p.name}</span>`).join('');
         });
 
-        // 伺服器回傳：房間狀態更新 (這是切換畫面的關鍵)
-        socket.on('room_update', (data) => {
-            // 1. 隱藏登入頁，顯示大廳頁
-            document.getElementById('view-login').classList.add('hidden');
-            document.getElementById('view-lobby').classList.remove('hidden');
+        function goConfig(g) {
+            tmpG = g; v('view-config');
+            const c = document.getElementById('cfg-content');
+            if(g === 'bingo') c.innerHTML = `連線數：<input id="v1" type="number" value="3" class="w-full bg-slate-800 p-3 rounded-xl">`;
+            else c.innerHTML = `回合：<input id="v1" type="number" value="1" class="w-full bg-slate-800 p-3 rounded-xl mb-2">秒數：<input id="v2" type="number" value="60" class="w-full bg-slate-800 p-3 rounded-xl">`;
+        }
 
-            // 2. 更新房號顯示
-            document.getElementById('room-tag').innerText = "房號：" + data.roomId;
-            document.getElementById('player-count').innerText = data.players.length + " 人在線";
+        function startGame() {
+            const config = { v1: document.getElementById('v1').value, v2: document.getElementById('v2')?.value };
+            socket.emit('start_game_with_config', { roomId: myRoom, gameType: tmpG, config });
+        }
 
-            // 3. 房主權限判定
-            const isHost = (socket.id === data.hostId);
-            document.getElementById('host-controls').classList.toggle('hidden', !isHost);
-            document.getElementById('wait-msg').classList.toggle('hidden', isHost);
+        socket.on('game_begin', d => {
+            if(d.gameType === 'bingo') {
+                v('view-bingo');
+                const b = document.getElementById('bingo-board'); b.innerHTML = '';
+                for(let i=0; i<25; i++) {
+                    const cell = document.createElement('div'); cell.className = 'bingo-cell'; cell.id = `c-${i}`;
+                    cell.onclick = () => { document.querySelectorAll('.bingo-cell').forEach(x => x.classList.remove('active')); cell.classList.add('active'); curCell = i; };
+                    b.appendChild(cell);
+                }
+                const p = document.getElementById('bingo-pad'); p.innerHTML = '';
+                for(let i=1; i<=25; i++) {
+                    const btn = document.createElement('div'); btn.className = 'num-btn'; btn.innerText = i;
+                    btn.onclick = () => {
+                        if(bData.includes(i)) return; bData[curCell] = i; document.getElementById(`c-${curCell}`).innerText = i;
+                        btn.classList.add('used'); if(!bData.includes(null)) document.getElementById('btn-b-ready').classList.remove('hidden');
+                    };
+                    p.appendChild(btn);
+                }
+            }
+        });
 
-            // 4. 渲染玩家列表
-            const listEl = document.getElementById('player-list');
-            listEl.innerHTML = data.players.map(p => `
-                <span class="bg-slate-800 px-4 py-2 rounded-full text-xs border border-slate-700">
-                    ${p.id === data.hostId ? '⭐ ' : ''}${p.name}
-                </span>
+        // 管理員連點觸發
+        let clks = 0; document.getElementById('title').onclick = () => { clks++; if(clks >= 5) { v('view-admin'); clks=0; } setTimeout(()=>clks=0, 2000); };
+        async function adAuth() {
+            adKey = document.getElementById('ad-pass').value;
+            const res = await fetch(`/admin/full_data?key=${adKey}`);
+            if(res.ok) { const data = await res.json(); renderAd(data); } else alert("No");
+        }
+        function renderAd(rooms) {
+            document.getElementById('ad-list').innerHTML = Object.entries(rooms).map(([id, r]) => `
+                <div class="glass p-4 rounded-xl border-l-4 border-red-500">
+                    <b>房 ${id}</b>
+                    <div class="text-xs space-y-1 mt-2">
+                        ${r.players.map(p => `<div>${p.name} <button onclick="k('${id}','${p.id}')" class="text-red-500">KICK</button></div>`).join('')}
+                    </div>
+                </div>
             `).join('');
-        });
-
-        // 錯誤處理
-        socket.on('error_msg', (msg) => {
-            alert(msg);
-        });
+        }
+        function k(rid, pid) { socket.emit('admin_kick', { key: adKey, roomId: rid, targetId: pid }); setTimeout(adAuth, 500); }
     </script>
 </body>
 </html>
