@@ -2,24 +2,28 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>上帝視角控制台</title>
+    <title>上帝視角 - Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body class="bg-slate-950 text-white p-8">
     <div id="auth-view" class="max-w-md mx-auto mt-20 p-8 bg-slate-900 rounded-3xl border border-slate-800 text-center">
-        <h2 class="text-2xl font-bold mb-6">管理員驗證</h2>
-        <input type="password" id="input-key" placeholder="1010215" class="w-full bg-slate-800 p-4 rounded-xl mb-4 text-center">
-        <button onclick="io().emit('admin_login', document.getElementById('input-key').value)" class="w-full bg-blue-600 p-4 rounded-xl font-bold">進入監控</button>
+        <h2 class="text-2xl font-bold mb-6 text-blue-500">ADMIN</h2>
+        <input type="password" id="input-key" placeholder="1010215" class="w-full bg-slate-800 p-4 rounded-xl mb-4 text-center outline-none">
+        <button id="btn-login" class="w-full bg-blue-600 p-4 rounded-xl font-bold">驗證進入</button>
     </div>
 
     <div id="main-view" class="hidden">
-        <h1 class="text-3xl font-black text-blue-500 mb-8">PARTYBOX 實時監控</h1>
+        <h1 class="text-3xl font-black text-blue-500 mb-8 tracking-tighter">實時監控台</h1>
         <div id="room-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
     </div>
 
     <script>
         const socket = io();
+        document.getElementById('btn-login').onclick = () => {
+            socket.emit('admin_login', document.getElementById('input-key').value);
+        };
+
         socket.on('admin_auth_success', () => {
             document.getElementById('auth-view').classList.add('hidden');
             document.getElementById('main-view').classList.remove('hidden');
@@ -27,21 +31,25 @@
 
         socket.on('admin_monitor_update', (rooms) => {
             document.getElementById('room-list').innerHTML = rooms.map(room => `
-                <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="font-bold text-blue-400">房號: ${room.id} (${room.gameType})</h3>
-                        <span class="text-xs text-orange-400">答案: ${room.currentWord || '無'}</span>
+                <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">
+                    <div class="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
+                        <h3 class="font-bold text-blue-400 font-mono">#${room.id}</h3>
+                        <span class="text-[10px] text-slate-500">${room.gameType}</span>
                     </div>
                     <div class="space-y-2">
                         ${room.players.map(p => `
-                            <div class="text-xs bg-slate-800 p-2 rounded">
-                                ${p.name} - 分數: ${p.score} | 身份: ${p.role || '平民'} | 題目: ${p.word || '無'}
+                            <div class="bg-slate-800/50 p-2 rounded text-[10px]">
+                                <b>${p.name}</b> (分: ${p.score})<br>
+                                <span class="text-green-500">角: ${p.role || '大廳'}</span> | 
+                                <span class="text-orange-400">詞: ${p.word || '無'}</span>
                             </div>
                         `).join('')}
                     </div>
+                    ${room.currentWord ? `<div class="mt-4 text-xs text-center text-orange-500">當前答案：${room.currentWord}</div>` : ''}
                 </div>
             `).join('');
         });
+        socket.on('toast', m => alert(m));
     </script>
 </body>
 </html>
