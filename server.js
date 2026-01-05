@@ -7,60 +7,75 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// 指定靜態檔案路徑，解決 404 問題
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
 
+// 7. 管理員後台 API (密鑰: admin123)
+app.get('/admin-data', (req, res) => {
+    if (req.query.key === "terry0215") res.json(rooms);
+    else res.status(403).send("拒絕訪問");
+});
+
 io.on('connection', (socket) => {
+    // 6. 房間人數系統
     socket.on('join_room', (data) => {
-        const { roomId, username, gameType } = data;
+        const { roomId, username, gameType, maxPlayers } = data;
         socket.join(roomId);
         socket.roomId = roomId;
+
         if (!rooms[roomId]) {
-            rooms[roomId] = { gameType, host: socket.id, players: [], gameStarted: false, winLines: 3 };
+            rooms[roomId] = { 
+                gameType, host: socket.id, players: [], 
+                gameStarted: false, winLines: 3, 
+                maxPlayers: parseInt(maxPlayers) || 10,
+                currentTurnIdx: 0, votes: {}
+            };
         }
-        rooms[roomId].players.push({ id: socket.id, name: username });
+
+        if (rooms[roomId].players.length >= rooms[roomId].maxPlayers) {
+            return socket.emit('error_msg', '房間已滿');
+        }
+
+        rooms[roomId].players.push({ id: socket.id, name: username, isOut: false });
         io.to(roomId).emit('room_update', rooms[roomId]);
     });
 
+    // 2 & 3. 房主設定與開始遊戲
     socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
         if (!room || room.host !== socket.id) return;
         room.gameStarted = true;
-        
-        // 分配誰是臥底身分
-        if (room.gameType === 'spy') {
-            const wordPairs = [["香蕉", "芭樂"], ["電腦", "手機"]];
-            const pair = wordPairs[Math.floor(Math.random() * wordPairs.length)];
-            const spyIdx = Math.floor(Math.random() * room.players.length);
-            room.players.forEach((p, idx) => {
-                io.to(p.id).emit('spy_setup', {
-                    role: (idx === spyIdx) ? "臥底" : "平民",
-                    word: (idx === spyIdx) ? pair[1] : pair[0]
-                });
-            });
-        }
+        room.winLines = parseInt(data.winLines) || 3;
+        room.currentTurnIdx = 0;
         io.to(data.roomId).emit('game_begin', { 
             turnId: room.players[0].id, 
-            winLines: data.winLines 
+            winLines: room.winLines,
+            gameType: room.gameType
         });
     });
 
-    // 🏆 關鍵修正：解決 502 當機問題
-    socket.on('drawing', (data) => {
-        if (data.roomId) {
-            socket.to(data.roomId).emit('render_drawing', data);
-        }
+    // 5. Bingo 輪流與同步
+    socket.on('bingo_click', (data) => {
+        const room = rooms[data.roomId];
+        if (!room || room.players[room.currentTurnIdx].id !== socket.id) return;
+        io.to(data.roomId).emit('bingo_sync', data.num);
+        room.currentTurnIdx = (room.currentTurnIdx + 1) % room.players.length;
+        io.to(data.roomId).emit('next_turn', { turnId: room.players[room.currentTurnIdx].id });
     });
 
-    socket.on('bingo_click', (data) => {
-        io.to(data.roomId).emit('bingo_sync', data.num);
+    // 4. 臥底投票
+    socket.on('cast_vote', (data) => {
         const room = rooms[data.roomId];
-        if (room) {
-            const idx = room.players.findIndex(p => p.id === socket.id);
-            const nextIdx = (idx + 1) % room.players.length;
-            io.to(data.roomId).emit('next_turn', { turnId: room.players[nextIdx].id });
+        if (!room) return;
+        room.votes[data.targetId] = (room.votes[data.targetId] || 0) + 1;
+        const totalVotes = Object.values(room.votes).reduce((a, b) => a + b, 0);
+        if (totalVotes >= room.players.filter(p => !p.isOut).length) {
+            const outId = Object.keys(room.votes).reduce((a, b) => room.votes[a] > room.votes[b] ? a : b);
+            const player = room.players.find(p => p.id === outId);
+            if (player) player.isOut = true;
+            io.to(data.roomId).emit('vote_result', { outPlayer: player ? player.name : "無人" });
+            room.votes = {};
         }
     });
 
@@ -72,5 +87,4 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`Server live on ${PORT}`));
+server.listen(process.env.PORT || 3000, () => console.log("Ready"));
