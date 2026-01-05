@@ -2,81 +2,126 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PARTY BOX 旗艦版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PARTY BOX 旗艦整合版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: white; font-family: sans-serif; }
-        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        body { background-color: #0f172a; color: white; overflow-x: hidden; font-family: sans-serif; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
         .hidden { display: none !important; }
-        .player-tag { background: #1e293b; padding: 4px 12px; border-radius: 99px; font-size: 12px; border: 1px solid #475569; }
+        .bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+        .bingo-cell { aspect-ratio: 1/1; background: #1e293b; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; border: 2px solid transparent; transition: 0.2s; }
+        .bingo-cell.marked { background: #ef4444; border-color: #f87171; }
+        .player-tag { background: #1e293b; padding: 4px 12px; border-radius: 99px; font-size: 11px; border: 1px solid #334155; }
     </style>
 </head>
 <body class="p-4">
 
-    <main id="view-menu" class="max-w-md mx-auto space-y-4 pt-20">
-        <h1 id="title-main" class="text-4xl font-black text-center mb-10 italic cursor-pointer">PARTY<span class="text-blue-500">BOX</span></h1>
-        <button onclick="goAction('create')" class="w-full glass p-6 rounded-2xl text-left border-l-4 border-blue-500 font-bold text-xl">創建房間</button>
-        <button onclick="goAction('join')" class="w-full glass p-6 rounded-2xl text-left border-l-4 border-orange-500 font-bold text-xl">加入房間</button>
-    </main>
+    <header class="max-w-md mx-auto mb-6">
+        <h1 id="main-title" class="text-4xl font-black italic text-center cursor-pointer select-none">PARTY<span class="text-blue-500">BOX</span></h1>
+    </header>
+
+    <section id="view-login" class="max-w-md mx-auto space-y-4 pt-10">
+        <div class="glass p-6 rounded-[2rem] space-y-4">
+            <input type="text" id="input-name" placeholder="輸入暱稱" class="w-full bg-slate-800 p-4 rounded-xl outline-none border border-slate-700 focus:border-blue-500">
+            <div id="join-fields" class="hidden space-y-4">
+                <input type="text" id="input-room" placeholder="輸入 4 位數房號" class="w-full bg-slate-800 p-4 rounded-xl outline-none border border-slate-700 focus:border-orange-500">
+            </div>
+            <button id="btn-create" onclick="setMode('create')" class="w-full bg-blue-600 p-4 rounded-xl font-bold">創建房間</button>
+            <button id="btn-join" onclick="setMode('join')" class="w-full bg-slate-700 p-4 rounded-xl font-bold">加入房間</button>
+            <button id="btn-confirm" onclick="confirmIdentity()" class="hidden w-full bg-green-600 p-4 rounded-xl font-bold">確認進入</button>
+        </div>
+    </section>
 
     <section id="view-lobby" class="hidden max-w-md mx-auto space-y-4">
         <div class="glass p-6 rounded-[2rem] text-center space-y-6">
-            <h2 id="room-display" class="text-2xl font-black text-blue-400">房號：----</h2>
+            <div class="flex justify-between items-center text-blue-400 font-bold">
+                <span id="display-room">房號：----</span>
+                <span id="player-count">0 人</span>
+            </div>
             <div id="player-list" class="flex flex-wrap gap-2 justify-center"></div>
             
-            <div id="host-controls" class="hidden space-y-3 pt-6 border-t border-slate-700">
-                <button onclick="reqStart('bingo')" class="w-full bg-slate-800 p-4 rounded-xl font-bold border-l-4 border-blue-500 hover:bg-slate-700">開始：賓果連連看</button>
-                <button onclick="reqStart('spy')" class="w-full bg-slate-800 p-4 rounded-xl font-bold border-l-4 border-green-500 hover:bg-slate-700">開始：誰是臥底</button>
+            <div id="host-controls" class="hidden pt-6 border-t border-slate-700 space-y-3">
+                <p class="text-xs text-slate-500 font-bold">房主遊戲選單</p>
+                <button onclick="reqStart('bingo')" class="w-full bg-slate-800 p-4 rounded-xl font-bold border-l-4 border-blue-500">賓果連連看</button>
+                <button onclick="reqStart('spy')" class="w-full bg-slate-800 p-4 rounded-xl font-bold border-l-4 border-green-500">誰是臥底</button>
             </div>
             <p id="wait-msg" class="text-slate-500 animate-pulse font-bold">等待房主選擇模式...</p>
         </div>
     </section>
 
-    <section id="view-admin" class="hidden fixed inset-0 bg-slate-950 z-[200] p-6 overflow-y-auto font-mono">
-        <div class="flex justify-between items-center mb-6 border-b border-slate-800 pb-2">
-            <h2 class="text-red-500 font-black">後台管理系統</h2>
-            <button onclick="document.getElementById('view-admin').classList.add('hidden')" class="text-xs">關閉</button>
+    <section id="view-game" class="hidden max-w-md mx-auto space-y-4">
+        <div class="glass p-6 rounded-[2rem]">
+            <h2 id="game-label" class="text-xl font-black text-center mb-4 text-orange-400"></h2>
+            
+            <div id="game-bingo" class="hidden space-y-4">
+                <p id="bingo-tip" class="text-center text-xs text-slate-400">請在格子中填入 1-25 不重複數字</p>
+                <div id="bingo-board" class="bingo-grid"></div>
+                <button id="btn-bingo-ready" onclick="finishBingoInit()" class="w-full bg-blue-600 p-3 rounded-xl font-bold">我填好了</button>
+            </div>
+
+            <div id="game-spy" class="hidden text-center py-10 space-y-6">
+                <div class="text-sm text-slate-400 italic">你的詞彙是：</div>
+                <div id="spy-word" class="text-4xl font-black tracking-widest bg-white/10 py-6 rounded-2xl">? ? ?</div>
+                <p id="spy-role" class="text-xs font-bold"></p>
+            </div>
         </div>
-        <div id="admin-rooms-list" class="space-y-4"></div>
+    </section>
+
+    <section id="view-admin" class="hidden fixed inset-0 bg-slate-950 z-[100] p-6 overflow-y-auto font-mono">
+        <div id="admin-login-ui" class="max-w-xs mx-auto pt-20 space-y-4">
+            <h2 class="text-red-500 font-black text-center text-xl">ADMIN ACCESS</h2>
+            <input type="password" id="admin-pass" class="w-full bg-slate-900 p-4 rounded-xl border border-red-900 outline-none" placeholder="密鑰">
+            <button onclick="verifyAdmin()" class="w-full bg-red-600 p-4 rounded-xl font-bold">驗證</button>
+            <button onclick="closeAdmin()" class="w-full text-slate-600">取消</button>
+        </div>
+        <div id="admin-dashboard" class="hidden space-y-4">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-red-600 font-bold">控制台</h2>
+                <button onclick="closeAdmin()" class="text-xs bg-slate-800 px-3 py-1 rounded">退出</button>
+            </div>
+            <div id="admin-room-list" class="space-y-4"></div>
+        </div>
     </section>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myRoom, myName, clickCount = 0;
+        let myName, myRoom, isHost = false, clickCount = 0, currentAction = '';
+        let myBingoBoard = [];
 
-        // 1. 隱藏入口 (連點標題 5 下)
-        document.getElementById('title-main').onclick = () => {
-            clickCount++;
-            if(clickCount >= 5) {
-                const pass = prompt("請輸入管理員密鑰：");
-                if(pass === "admin888") openAdmin(pass);
-                clickCount = 0;
-            }
-            setTimeout(() => clickCount = 0, 3000);
-        };
+        // 1. 內嵌登入邏輯
+        function setMode(mode) {
+            currentAction = mode;
+            document.getElementById('join-fields').classList.toggle('hidden', mode === 'create');
+            document.getElementById('btn-create').classList.toggle('hidden', true);
+            document.getElementById('btn-join').classList.toggle('hidden', true);
+            document.getElementById('btn-confirm').classList.remove('hidden');
+        }
 
-        // 2. 房間邏輯
-        function goAction(type) {
-            myName = prompt("請輸入你的暱稱：");
-            if(!myName) return;
-            if(type === 'create') socket.emit('create_room');
-            else {
-                myRoom = prompt("請輸入 4 位數房號：");
+        function confirmIdentity() {
+            myName = document.getElementById('input-name').value;
+            if(!myName) return alert("請輸入暱稱");
+            if(currentAction === 'create') {
+                socket.emit('create_room');
+            } else {
+                myRoom = document.getElementById('input-room').value;
                 socket.emit('join_room', { roomId: myRoom, username: myName });
             }
         }
 
-        socket.on('room_created', d => socket.emit('join_room', { roomId: d.roomId, username: myName }));
+        // 2. 房間同步
+        socket.on('room_created', d => {
+            myRoom = d.roomId;
+            socket.emit('join_room', { roomId: myRoom, username: myName });
+        });
 
         socket.on('room_update', d => {
             myRoom = d.roomId;
-            document.getElementById('view-menu').classList.add('hidden');
-            document.getElementById('view-lobby').classList.remove('hidden');
-            document.getElementById('room-display').innerText = "房號：" + d.roomId;
-
-            const isHost = (socket.id === d.hostId);
+            isHost = (socket.id === d.hostId);
+            showView('view-lobby');
+            document.getElementById('display-room').innerText = "房號：" + d.roomId;
+            document.getElementById('player-count').innerText = d.players.length + " 人";
             document.getElementById('host-controls').classList.toggle('hidden', !isHost);
             document.getElementById('wait-msg').classList.toggle('hidden', isHost);
 
@@ -85,49 +130,107 @@
             ).join('');
         });
 
-        function reqStart(mode) { socket.emit('start_game_with_config', { roomId: myRoom, gameType: mode }); }
+        // 3. 遊戲啟動
+        function reqStart(game) {
+            socket.emit('start_game', { roomId: myRoom, gameType: game });
+        }
 
-        socket.on('game_begin', d => alert("正在轉場到：" + d.gameType));
-        socket.on('admin_msg', m => { alert(m); location.reload(); });
-        socket.on('error_msg', m => alert(m));
+        socket.on('game_begin', d => {
+            showView('view-game');
+            document.getElementById('game-label').innerText = d.gameType === 'bingo' ? '賓果連連看' : '誰是臥底';
+            if(d.gameType === 'bingo') initBingoUI();
+            if(d.gameType === 'spy') {
+                document.getElementById('game-spy').classList.remove('hidden');
+                document.getElementById('spy-word').innerText = d.word;
+                document.getElementById('spy-role').innerText = d.isSpy ? "你目前的身份是：臥底" : "你目前的身份是：平民";
+            }
+        });
 
-        // 3. 管理員功能
-        async function openAdmin(key) {
-            document.getElementById('view-admin').classList.remove('hidden');
-            const res = await fetch(`/admin/full_data?key=${key}`);
-            const rooms = await res.json();
-            const list = document.getElementById('admin-rooms-list');
-            list.innerHTML = Object.entries(rooms).map(([rid, r]) => `
-                <div class="glass p-4 rounded-xl border-l-4 border-red-500">
-                    <div class="flex justify-between">
-                        <b>房間 ${rid}</b>
-                        <button onclick="closeRoom('${rid}', '${key}')" class="bg-red-900 px-2 text-[10px] rounded">關閉房間</button>
-                    </div>
-                    <div class="mt-2 space-y-1">
-                        ${r.players.map(p => `
-                            <div class="flex justify-between text-xs">
-                                <span>${p.name}</span>
-                                <button onclick="kick('${rid}', '${p.id}', '${key}')" class="text-red-500">踢出</button>
-                            </div>
-                        `).join('')}
+        // 4. 賓果邏輯
+        function initBingoUI() {
+            document.getElementById('game-bingo').classList.remove('hidden');
+            const board = document.getElementById('bingo-board');
+            board.innerHTML = '';
+            for(let i=0; i<25; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'bingo-cell';
+                cell.innerHTML = `<input type="number" class="w-full h-full bg-transparent text-center outline-none" min="1" max="25">`;
+                board.appendChild(cell);
+            }
+        }
+
+        function finishBingoInit() {
+            const inputs = document.querySelectorAll('.bingo-cell input');
+            const vals = Array.from(inputs).map(i => parseInt(i.value));
+            if(vals.includes(NaN) || new Set(vals).size !== 25) return alert("請填入 1-25 不重複數字");
+            myBingoBoard = vals;
+            socket.emit('bingo_init_done', { roomId: myRoom, board: myBingoBoard });
+            
+            // 轉換為點擊模式
+            document.getElementById('bingo-tip').innerText = "點擊數字進行連線";
+            document.getElementById('btn-bingo-ready').classList.add('hidden');
+            const cells = document.querySelectorAll('.bingo-cell');
+            cells.forEach((c, idx) => {
+                c.innerHTML = myBingoBoard[idx];
+                c.onclick = () => {
+                    c.classList.add('marked');
+                    socket.emit('bingo_click', { roomId: myRoom, num: myBingoBoard[idx] });
+                };
+            });
+        }
+
+        socket.on('bingo_sync', num => {
+            const cells = document.querySelectorAll('.bingo-cell');
+            cells.forEach(c => { if(c.innerText == num) c.classList.add('marked'); });
+        });
+
+        // 5. 管理員內嵌系統
+        document.getElementById('main-title').onclick = () => {
+            clickCount++;
+            if(clickCount >= 5) {
+                document.getElementById('view-admin').classList.remove('hidden');
+                document.getElementById('admin-login-ui').classList.remove('hidden');
+                document.getElementById('admin-dashboard').classList.add('hidden');
+            }
+            setTimeout(() => clickCount = 0, 2000);
+        };
+
+        async function verifyAdmin() {
+            const pass = document.getElementById('admin-pass').value;
+            const res = await fetch(`/admin/full_data?key=${pass}`);
+            if(res.ok) {
+                document.getElementById('admin-login-ui').classList.add('hidden');
+                document.getElementById('admin-dashboard').classList.remove('hidden');
+                const data = await res.json();
+                renderAdmin(data, pass);
+            } else { alert("密鑰錯誤"); }
+        }
+
+        function renderAdmin(rooms, key) {
+            const list = document.getElementById('admin-room-list');
+            list.innerHTML = Object.entries(rooms).map(([id, r]) => `
+                <div class="glass p-4 rounded-xl border-l-4 border-red-600">
+                    <div class="flex justify-between font-bold mb-2"><span>房號 ${id}</span></div>
+                    <div class="space-y-1">
+                        ${r.players.map(p => `<div class="flex justify-between text-xs"><span>${p.name}</span><button onclick="kick('${id}','${p.id}','${key}')" class="text-red-500">踢出</button></div>`).join('')}
                     </div>
                 </div>
             `).join('');
         }
 
-        async function closeRoom(rid, key) {
-            await fetch('/admin/close_room', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ key, roomId: rid })
-            });
-            openAdmin(key);
-        }
-
         function kick(rid, pid, key) {
             socket.emit('admin_kick_player', { key, roomId: rid, targetId: pid });
-            setTimeout(() => openAdmin(key), 500);
+            setTimeout(() => verifyAdmin(), 500);
         }
+
+        function closeAdmin() { document.getElementById('view-admin').classList.add('hidden'); }
+        function showView(id) {
+            ['view-login', 'view-lobby', 'view-game'].forEach(v => document.getElementById(v).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        socket.on('admin_msg', m => { alert(m); location.reload(); });
+        socket.on('error_msg', m => alert(m));
     </script>
 </body>
 </html>
