@@ -11,7 +11,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 let rooms = {};
-const ADMIN_KEY = "admin888"; // 設定你的管理員密鑰
+const ADMIN_KEY = "admin888";
 
 io.on('connection', (socket) => {
     // 創建房間
@@ -21,8 +21,9 @@ io.on('connection', (socket) => {
             host: socket.id,
             players: [],
             gameStarted: false,
-            scores: {},
-            playerBoards: {} 
+            gameType: null,
+            playerBoards: {},
+            scores: {}
         };
         socket.emit('room_created', { roomId });
     });
@@ -49,30 +50,47 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 啟動遊戲
-    socket.on('start_game_with_config', (data) => {
+    // 啟動遊戲邏輯 (包含詞彙分配)
+    socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
-        if (room && room.host === socket.id) {
-            room.gameStarted = true;
-            io.to(data.roomId).emit('game_begin', data);
+        if (!room || room.host !== socket.id) return;
+
+        room.gameStarted = true;
+        room.gameType = data.gameType;
+
+        if (data.gameType === 'spy') {
+            const pairs = [["蘋果", "水梨"], ["鋼琴", "風琴"], ["漢堡", "三明治"]];
+            const selected = pairs[Math.floor(Math.random() * pairs.length)];
+            const spyIdx = Math.floor(Math.random() * room.players.length);
+            
+            room.players.forEach((p, idx) => {
+                io.to(p.id).emit('game_begin', {
+                    gameType: 'spy',
+                    word: (idx === spyIdx) ? selected[1] : selected[0],
+                    isSpy: (idx === spyIdx)
+                });
+            });
+        } else {
+            io.to(data.roomId).emit('game_begin', { gameType: data.gameType });
         }
     });
 
-    // 賓果同步 (供管理員看牌)
+    // 賓果同步與管理員紀錄
     socket.on('bingo_init_done', (data) => {
-        if(rooms[data.roomId]) {
-            rooms[data.roomId].playerBoards[socket.id] = data.board;
-        }
+        if(rooms[data.roomId]) rooms[data.roomId].playerBoards[socket.id] = data.board;
     });
 
-    // 管理員踢人
+    socket.on('bingo_click', (data) => {
+        io.to(data.roomId).emit('bingo_sync', data.num);
+    });
+
+    // 管理員操作
     socket.on('admin_kick_player', (data) => {
         if (data.key !== ADMIN_KEY) return;
         const room = rooms[data.roomId];
         if (room) {
             io.to(data.targetId).emit('admin_msg', '你已被管理員踢出');
-            const targetSocket = io.sockets.sockets.get(data.targetId);
-            if (targetSocket) targetSocket.leave(data.roomId);
+            io.sockets.sockets.get(data.targetId)?.leave(data.roomId);
             room.players = room.players.filter(p => p.id !== data.targetId);
             io.to(data.roomId).emit('room_update', { roomId: data.roomId, players: room.players, hostId: room.host });
         }
@@ -91,21 +109,10 @@ io.on('connection', (socket) => {
     });
 });
 
-// 管理員專用 API
 app.get('/admin/full_data', (req, res) => {
     if (req.query.key !== ADMIN_KEY) return res.status(403).send("Forbidden");
     res.json(rooms);
 });
 
-app.post('/admin/close_room', (req, res) => {
-    const { key, roomId } = req.body;
-    if (key !== ADMIN_KEY) return res.status(403).send("Forbidden");
-    if (rooms[roomId]) {
-        io.to(roomId).emit('admin_msg', '管理員已解散房間');
-        delete rooms[roomId];
-        res.json({ success: true });
-    }
-});
-
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server on ${PORT}`));
