@@ -3,136 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Let's play together👯🤼‍♀️</title>
+    <title>Morandi 派對盒</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
-        .bingo-cell { aspect-ratio: 1/1; transition: 0.2s; }
+        .bingo-cell { aspect-ratio: 1/1; cursor: pointer; transition: 0.2s; }
+        .hidden { display: none; }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen text-slate-800 p-4 font-sans">
+<body class="bg-slate-50 min-h-screen text-slate-800 p-4 font-sans flex flex-col items-center">
 
-    <div id="lobby" class="flex items-center justify-center min-h-screen">
-        <div class="glass p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm space-y-4 border border-white">
-            <h1 class="text-3xl font-black text-center mb-6 tracking-tighter text-slate-700">PARTY BOX</h1>
-            
-            <div>
-                <label class="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">玩家暱稱</label>
-                <input type="text" id="username" placeholder="你的名字" class="w-full p-4 rounded-2xl bg-slate-100 border-none outline-none ring-2 ring-transparent focus:ring-blue-400 transition-all">
-            </div>
-
-            <div>
-                <label class="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">房間號碼</label>
-                <input type="text" id="roomId" placeholder="4位數字房號" class="w-full p-4 rounded-2xl bg-slate-100 border-none outline-none ring-2 ring-transparent focus:ring-blue-400 transition-all">
-            </div>
-
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">賓果勝利線</label>
-                    <input type="number" id="winLines" value="3" class="w-full p-4 rounded-2xl bg-slate-100 border-none outline-none">
-                </div>
-                <div>
-                    <label class="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">遊戲模式</label>
-                    <select id="gameSelect" class="w-full p-4 rounded-2xl bg-slate-100 border-none outline-none">
-                        <option value="bingo">賓果連連看</option>
-                        <option value="draw">你畫我猜</option>
-                        <option value="spy">誰是臥底</option>
-                    </select>
-                </div>
-            </div>
-
-            <button onclick="join()" class="w-full bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg shadow-blue-200 active:scale-95 transition-all">進入遊戲</button>
-        </div>
+    <div id="lobby" class="w-full max-w-sm mt-10 space-y-4">
+        <h1 class="text-4xl font-black text-center text-slate-700 mb-8 tracking-tighter">PARTY BOX</h1>
+        <input type="text" id="username" placeholder="玩家暱稱" class="w-full p-4 rounded-2xl bg-white shadow-sm ring-2 ring-transparent focus:ring-blue-400 outline-none">
+        <input type="text" id="roomId" placeholder="房號" class="w-full p-4 rounded-2xl bg-white shadow-sm ring-2 ring-transparent focus:ring-blue-400 outline-none">
+        <select id="gameSelect" class="w-full p-4 rounded-2xl bg-white shadow-sm outline-none">
+            <option value="bingo">賓果連連看</option>
+            <option value="draw">你畫我猜</option>
+            <option value="spy">誰是臥底</option>
+        </select>
+        <button onclick="join()" class="w-full bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg active:scale-95 transition">開始</button>
     </div>
 
-    <div id="game-area" class="hidden max-w-md mx-auto pt-6 space-y-4">
-        <div class="flex justify-between items-center px-2">
-            <h2 id="turn-status" class="text-2xl font-black text-slate-700">等待開局...</h2>
-            <div id="player-count" class="bg-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm border border-slate-200"></div>
+    <div id="game-area" class="hidden w-full max-w-md space-y-4 pt-6">
+        <div class="flex justify-between items-center">
+            <h2 id="turn-status" class="text-xl font-black text-slate-600">等待開局...</h2>
+            <div id="player-tags" class="flex gap-1"></div>
         </div>
 
-        <div id="player-tags" class="flex flex-wrap gap-2 px-2 mb-4"></div>
+        <div id="bingo-ui" class="hidden">
+            <div id="bingo-grid" class="grid grid-cols-5 gap-2 bg-white p-2 rounded-3xl shadow-xl border-4 border-white"></div>
+        </div>
 
-        <div id="bingo-container" class="hidden space-y-4">
-            <div class="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm">
-                <span id="fill-hint" class="text-xs font-bold text-blue-500">📥 點擊格子填入 1-25</span>
-                <button onclick="autoFillRandom()" class="text-[10px] bg-slate-800 text-white px-3 py-1.5 rounded-full font-bold">隨機填滿</button>
+        <div id="draw-ui" class="hidden space-y-4">
+            <canvas id="canvas" width="400" height="400" class="w-full bg-white rounded-3xl shadow-xl border-4 border-white touch-none"></canvas>
+            <p id="draw-word" class="text-center font-bold text-blue-500"></p>
+        </div>
+
+        <div id="spy-ui" class="hidden space-y-6">
+            <div onclick="toggleSpyCard()" class="bg-white p-16 rounded-[3rem] shadow-xl text-center border-b-[12px] border-blue-500 cursor-pointer active:scale-95 transition-all">
+                <p class="text-[10px] font-bold text-slate-300 mb-2">點擊查看身分</p>
+                <div id="spy-word" class="text-4xl font-black text-slate-800">？ ？ ？</div>
             </div>
-            <div id="bingo-grid" class="grid grid-cols-5 gap-2 bg-white p-2 rounded-[2rem] shadow-xl border-4 border-white"></div>
+            <div id="vote-list" class="grid grid-cols-2 gap-2"></div>
         </div>
 
-        <div id="spy-container" class="hidden">
-            <div id="spy-card" onclick="toggleSpy()" class="bg-white p-12 rounded-[2.5rem] shadow-xl text-center border-b-[12px] border-blue-500 cursor-pointer active:scale-95 transition-all">
-                <p class="text-[10px] font-black text-slate-300 uppercase mb-2">點擊查看身分</p>
-                <div id="spy-word" class="text-4xl font-black text-slate-800 tracking-widest">？ ？ ？</div>
-            </div>
-        </div>
-
-        <div id="host-controls" class="hidden mt-10">
-            <button onclick="start()" class="w-full bg-orange-500 text-white p-5 rounded-3xl font-black shadow-xl shadow-orange-100 active:scale-95 transition-all">房長：開始遊戲</button>
-        </div>
+        <button id="host-btn" onclick="startGame()" class="hidden w-full bg-orange-500 text-white p-5 rounded-3xl font-black shadow-xl">房長開局</button>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let curRoom = "", isHost = false, myPlayers = [];
-        window.isMyTurn = false;
+        let curRoom = "", isMyTurn = false, myType = "", mySpyWord = "", players = [];
 
         function join() {
-            const data = {
-                username: document.getElementById('username').value,
-                roomId: document.getElementById('roomId').value,
-                gameType: document.getElementById('gameSelect').value
-            };
-            if(!data.username || !data.roomId) return alert("請填寫名字與房號");
-            curRoom = data.roomId;
+            const data = { username: document.getElementById('username').value, roomId: document.getElementById('roomId').value, gameType: document.getElementById('gameSelect').value };
+            curRoom = data.roomId; myType = data.gameType;
             socket.emit('join_room', data);
             document.getElementById('lobby').classList.add('hidden');
             document.getElementById('game-area').classList.remove('hidden');
-            
-            if(data.gameType === 'bingo') { document.getElementById('bingo-container').classList.remove('hidden'); initBingoBoard(); }
-            if(data.gameType === 'spy') { document.getElementById('spy-container').classList.remove('hidden'); }
+            document.getElementById(`${myType}-ui`).classList.remove('hidden');
+            if(myType === 'bingo') initBingo();
+            if(myType === 'draw') initDraw();
         }
 
         socket.on('room_update', (room) => {
-            isHost = (socket.id === room.host);
-            myPlayers = room.players;
-            document.getElementById('player-tags').innerHTML = room.players.map(p => `
-                <div class="bg-white border border-slate-200 px-3 py-1.5 rounded-full text-[10px] font-black shadow-sm flex items-center">
-                    <span class="w-1.5 h-1.5 rounded-full mr-2 ${p.id === room.host ? 'bg-orange-400' : 'bg-blue-400'}"></span>
-                    ${p.name}${p.id === socket.id ? ' (你)' : ''}
-                </div>
-            `).join('');
-            if(isHost && !room.gameStarted) document.getElementById('host-controls').classList.remove('hidden');
+            players = room.players;
+            if(socket.id === room.host && !room.gameStarted) document.getElementById('host-btn').classList.remove('hidden');
+            document.getElementById('player-tags').innerHTML = room.players.map(p => `<span class="px-2 py-1 bg-white text-[10px] rounded-full border border-slate-200">${p.name}</span>`).join('');
         });
 
-        function start() {
-            socket.emit('start_game', { roomId: curRoom, winLines: document.getElementById('winLines').value });
-        }
+        function startGame() { socket.emit('start_game', { roomId: curRoom }); document.getElementById('host-btn').classList.add('hidden'); }
 
-        socket.on('game_begin', (data) => {
-            document.getElementById('host-controls').classList.add('hidden');
-            if(data.winLines) document.getElementById('winLines').value = data.winLines;
-            if(data.turnId) updateTurn(data.turnId);
+        socket.on('game_begin', (data) => { if(data.turnId) updateTurn(data.turnId); });
+        function updateTurn(id) { isMyTurn = (socket.id === id); document.getElementById('turn-status').innerText = isMyTurn ? "🔴 你的回合" : "⌛ 等待中"; }
+
+        // --- 賓果邏輯 ---
+        function initBingo() {
+            const grid = document.getElementById('bingo-grid');
+            grid.innerHTML = "";
+            const nums = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+            nums.forEach(n => {
+                const cell = document.createElement('div');
+                cell.className = "bingo-cell bg-slate-100 flex items-center justify-center font-bold rounded-xl text-lg";
+                cell.innerText = n; cell.id = `cell-${n}`;
+                cell.onclick = () => { if(isMyTurn) socket.emit('bingo_click', { roomId: curRoom, num: n }); };
+                grid.appendChild(cell);
+            });
+        }
+        socket.on('bingo_sync', (num) => { document.getElementById(`cell-${num}`).classList.add('bg-orange-500', 'text-white', 'scale-90'); });
+        socket.on('next_turn', (data) => updateTurn(data.turnId));
+
+        // --- 誰是臥底邏輯 ---
+        socket.on('spy_setup', (data) => { 
+            mySpyWord = data.word; 
+            const list = document.getElementById('vote-list');
+            list.innerHTML = players.map(p => `<button onclick="vote('${p.id}')" class="bg-white p-3 rounded-xl text-xs font-bold shadow-sm border border-slate-100">投 ${p.name}</button>`).join('');
         });
+        function toggleSpyCard() { const el = document.getElementById('spy-word'); el.innerText = el.innerText === "？ ？ ？" ? mySpyWord : "？ ？ ？"; el.classList.toggle('text-blue-600'); }
+        function vote(id) { socket.emit('cast_vote', { roomId: curRoom, targetId: id }); alert("已投票！"); }
+        socket.on('vote_result', (data) => alert("投票結束！結果已在伺服器結算。"));
 
-        function updateTurn(id) {
-            window.isMyTurn = (socket.id === id);
-            document.getElementById('turn-status').innerText = window.isMyTurn ? "🔴 你的回合" : "⌛ 等待中";
+        // --- 你畫我猜邏輯 (簡化繪圖代碼) ---
+        let ctx;
+        function initDraw() {
+            const canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d'); ctx.lineWidth = 3;
+            canvas.onmousemove = (e) => {
+                if(!isMyTurn || e.buttons !== 1) return;
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left, y = e.clientY - rect.top;
+                ctx.lineTo(x, y); ctx.stroke();
+                socket.emit('drawing', { roomId: curRoom, x, y, type: 'line' });
+            };
+            canvas.onmousedown = () => { ctx.beginPath(); socket.emit('drawing', { roomId: curRoom, type: 'start' }); };
         }
-
-        // 誰是臥底邏輯
-        let spyWord = "";
-        socket.on('spy_setup', (data) => { spyWord = data.word; });
-        function toggleSpy() {
-            const el = document.getElementById('spy-word');
-            el.innerText = el.innerText === "？ ？ ？" ? spyWord : "？ ？ ？";
-            el.classList.toggle('text-blue-600');
-        }
-
+        socket.on('drawing', (d) => { if(d.type === 'start') ctx.beginPath(); else ctx.lineTo(d.x, d.y); ctx.stroke(); });
+        socket.on('your_word', (d) => { document.getElementById('draw-word').innerText = "你的題目："+d.word; alert("你是畫家！題目："+d.word); });
         socket.on('force_disconnect', (msg) => { alert(msg); location.reload(); });
     </script>
-    <script src="bingo.js"></script>
 </body>
 </html>
