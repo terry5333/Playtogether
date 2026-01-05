@@ -2,64 +2,79 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Party Box</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Morandi Party Box</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .bingo-cell { aspect-ratio: 1/1; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .hidden { display: none !important; }
-        canvas { touch-action: none; border: 2px solid #333; background: #fff; width: 100%; max-width: 400px; }
+        .glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); }
+        .bingo-cell { aspect-ratio: 1/1; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; border-radius: 12px; transition: 0.2s; border: 2px solid #f1f5f9; }
+        .cell-filled { background: #e0f2fe; color: #0ea5e9; border-color: #0ea5e9; }
+        .cell-marked { background: #ef4444 !important; color: white !important; border-color: #ef4444 !important; }
+        canvas { touch-action: none; background: #fff; border-radius: 20px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <div id="lobby" class="flex flex-col items-center pt-20 space-y-4">
-        <h1 class="text-4xl font-bold">PARTY BOX</h1>
-        <input type="text" id="username" placeholder="你的名字" class="p-2 border rounded w-64">
-        <input type="text" id="roomId" placeholder="房號" class="p-2 border rounded w-64">
-        <button onclick="join()" class="bg-blue-500 text-white px-10 py-2 rounded font-bold">進入房間</button>
+<body class="bg-[#f8fafc] text-slate-800 font-sans">
+
+    <div id="lobby" class="min-h-screen flex flex-col items-center justify-center p-6">
+        <div class="w-full max-w-sm space-y-6">
+            <h1 class="text-5xl font-black text-center text-slate-900 tracking-tighter mb-10">PARTY<br><span class="text-blue-600">BOX.</span></h1>
+            <input type="text" id="username" placeholder="你的暱稱" class="w-full p-4 rounded-3xl border-none shadow-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition">
+            <input type="text" id="roomId" placeholder="輸入房號" class="w-full p-4 rounded-3xl border-none shadow-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition">
+            <button onclick="join()" class="w-full bg-slate-900 text-white p-4 rounded-3xl font-bold shadow-xl active:scale-95 transition">加入房間</button>
+        </div>
     </div>
 
-    <div id="game-area" class="hidden p-4 flex flex-col items-center">
-        <div id="host-panel" class="hidden bg-white p-4 rounded shadow mb-4 w-full max-w-sm">
-            <h2 class="font-bold border-b mb-2 text-center">房長控制台</h2>
-            <select id="gameSelect" class="w-full p-2 mb-2 border">
-                <option value="bingo">賓果</option>
+    <div id="game-area" class="hidden min-h-screen p-4 flex flex-col items-center">
+        
+        <div id="host-panel" class="hidden w-full max-w-sm bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100 mb-6">
+            <h2 class="text-center font-black text-slate-400 text-xs uppercase tracking-widest mb-4">Game Settings</h2>
+            <select id="gameType" onchange="toggleSettings()" class="w-full p-3 bg-slate-50 rounded-2xl border-none outline-none font-bold text-slate-700">
+                <option value="bingo">賓果連連看</option>
                 <option value="draw">你畫我猜</option>
                 <option value="spy">誰是臥底</option>
             </select>
-            <button onclick="startGame()" class="w-full bg-orange-500 text-white py-2 rounded">開始遊戲</button>
-        </div>
-
-        <h2 id="status" class="text-xl mb-4 font-bold text-blue-600">等待開局...</h2>
-
-        <div id="ui-bingo" class="hidden w-full max-w-sm">
-            <p class="text-center text-sm mb-2">請依序填入 1-25 號</p>
-            <div id="bingo-grid" class="grid grid-cols-5 gap-1 bg-white p-1"></div>
-        </div>
-
-        <div id="ui-draw" class="hidden w-full max-w-md flex flex-col items-center space-y-2">
-            <p id="draw-word" class="text-lg font-bold text-red-500">準備猜題...</p>
-            <canvas id="canvas" width="400" height="400"></canvas>
-            <button id="clear-draw" onclick="clearCanvas()" class="hidden bg-gray-500 text-white px-4 py-1 rounded text-sm">清除畫布</button>
-            
-            <div id="guess-bar" class="flex w-full mt-2">
-                <input type="text" id="guess-input" placeholder="輸入答案..." class="flex-1 p-2 border rounded-l">
-                <button onclick="sendGuess()" class="bg-blue-600 text-white px-4 rounded-r">猜！</button>
+            <div id="spy-config" class="hidden mt-4">
+                <label class="text-xs font-bold text-slate-400">倒數秒數</label>
+                <input type="number" id="spyTime" value="60" class="w-full p-3 bg-slate-50 rounded-2xl mt-1">
             </div>
-            <div id="chat-box" class="w-full h-24 overflow-y-auto bg-gray-200 p-2 mt-2 text-sm rounded"></div>
+            <button onclick="startGame()" class="w-full bg-blue-600 text-white p-4 rounded-2xl font-bold mt-4 shadow-lg shadow-blue-100">開始遊戲</button>
         </div>
+
+        <div id="ui-bingo" class="hidden w-full max-w-sm space-y-4">
+            <div id="bingo-hint" class="text-center font-bold text-blue-500 bg-blue-50 py-2 rounded-full text-sm">請依序填入 1-25</div>
+            <div id="bingo-grid" class="grid grid-cols-5 gap-2 bg-white p-3 rounded-[2rem] shadow-xl"></div>
+        </div>
+
+        <div id="ui-draw" class="hidden w-full max-w-sm space-y-4 text-center">
+            <p id="draw-info" class="font-black text-xl text-slate-700">準備猜題...</p>
+            <canvas id="canvas" width="400" height="400" class="w-full"></canvas>
+            <div id="guess-area" class="flex gap-2">
+                <input type="text" id="guess-input" placeholder="輸入答案" class="flex-1 p-3 rounded-2xl border-none shadow-inner bg-slate-100">
+                <button onclick="submitGuess()" class="bg-slate-900 text-white px-6 rounded-2xl font-bold">送出</button>
+            </div>
+        </div>
+
+        <div id="ui-spy" class="hidden w-full max-w-sm space-y-6">
+            <div id="timer-box" class="text-center text-3xl font-black text-red-500">60s</div>
+            <div onclick="toggleSpy()" class="h-64 bg-white rounded-[3rem] shadow-2xl flex flex-col items-center justify-center border-b-[12px] border-blue-500 active:scale-95 transition-all">
+                <p class="text-[10px] font-bold text-slate-300 uppercase mb-2">點擊查看身分</p>
+                <span id="spy-word" class="text-4xl font-black text-slate-800">？ ？ ？</span>
+            </div>
+            <div id="vote-list" class="hidden grid grid-cols-2 gap-2"></div>
+        </div>
+
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myUsername, myRoom, isHost = false, isTurn = false;
+        let curRoom, myName, isHost = false, fillIdx = 1, board = Array(25).fill(0), myWord = "";
 
         function join() {
-            myUsername = document.getElementById('username').value;
-            myRoom = document.getElementById('roomId').value;
-            if(!myUsername || !myRoom) return alert("請填寫名字與房號");
-            socket.emit('join_room', { roomId: myRoom, username: myUsername });
+            myName = document.getElementById('username').value;
+            curRoom = document.getElementById('roomId').value;
+            if(!myName || !curRoom) return alert("填寫完整");
+            socket.emit('join_room', { roomId: curRoom, username: myName });
             document.getElementById('lobby').classList.add('hidden');
             document.getElementById('game-area').classList.remove('hidden');
         }
@@ -70,69 +85,66 @@
         });
 
         function startGame() {
-            const gameType = document.getElementById('gameSelect').value;
-            socket.emit('start_game', { roomId: myRoom, gameType });
+            const type = document.getElementById('gameType').value;
+            const settings = { spyTime: document.getElementById('spyTime').value };
+            socket.emit('start_game', { roomId: curRoom, gameType: type, settings });
             document.getElementById('host-panel').classList.add('hidden');
         }
 
         socket.on('game_begin', (data) => {
-            document.getElementById('ui-bingo').classList.toggle('hidden', data.gameType !== 'bingo');
-            document.getElementById('ui-draw').classList.toggle('hidden', data.gameType !== 'draw');
-            
-            if(data.gameType === 'draw') {
-                isTurn = (socket.id === data.turnId);
-                document.getElementById('status').innerText = isTurn ? "🎨 你是畫家" : "🧐 正在猜題";
-                document.getElementById('guess-bar').classList.toggle('hidden', isTurn);
-                document.getElementById('clear-draw').classList.toggle('hidden', !isTurn);
-                initCanvas();
+            document.querySelectorAll('[id^="ui-"]').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`ui-${data.gameType}`).classList.remove('hidden');
+            if(data.gameType === 'bingo') initBingo();
+            if(data.gameType === 'draw') initDraw();
+        });
+
+        // 賓果邏輯：手動填號
+        function initBingo() {
+            const grid = document.getElementById('bingo-grid'); grid.innerHTML = "";
+            for(let i=0; i<25; i++) {
+                const cell = document.createElement('div');
+                cell.className = "bingo-cell bg-slate-50";
+                cell.onclick = () => {
+                    if(fillIdx <= 25) {
+                        if(board[i]) return;
+                        board[i] = fillIdx; cell.innerText = fillIdx; cell.classList.add('cell-filled'); fillIdx++;
+                    } else {
+                        socket.emit('bingo_click', { roomId: curRoom, num: board[i] });
+                    }
+                };
+                grid.appendChild(cell);
             }
-        });
-
-        socket.on('your_word', (data) => {
-            document.getElementById('draw-word').innerText = "題目：" + data.word;
-        });
-
-        // 你畫我猜：猜題
-        function sendGuess() {
-            const val = document.getElementById('guess-input').value;
-            if(!val) return;
-            socket.emit('submit_guess', { roomId: myRoom, username: myUsername, guess: val });
-            document.getElementById('guess-input').value = "";
         }
-
-        socket.on('chat_msg', (data) => {
-            const box = document.getElementById('chat-box');
-            box.innerHTML += `<div><b>${data.user}:</b> ${data.text}</div>`;
-            box.scrollTop = box.scrollHeight;
+        socket.on('bingo_sync', (num) => {
+            const idx = board.indexOf(num);
+            if(idx !== -1) document.getElementById('bingo-grid').children[idx].classList.add('cell-marked');
         });
 
-        socket.on('draw_success', (data) => {
-            alert(`🎉 ${data.winner} 猜對了！答案是 [${data.word}]`);
+        // 誰是臥底邏輯
+        socket.on('spy_setup', (data) => { myWord = data.word; });
+        function toggleSpy() { const el = document.getElementById('spy-word'); el.innerText = el.innerText === "？ ？ ？" ? myWord : "？ ？ ？"; }
+        socket.on('timer_sync', (s) => document.getElementById('timer-box').innerText = s + "s");
+        socket.on('spy_force_vote', () => {
+            document.getElementById('vote-list').classList.remove('hidden');
+            alert("描述時間到！開始投票");
         });
 
-        // 畫布邏輯
+        // 你畫我猜畫布 (修正坐標)
         let ctx, drawing = false;
-        function initCanvas() {
-            const canvas = document.getElementById('canvas');
-            ctx = canvas.getContext('2d');
-            canvas.onmousedown = (e) => { if(!isTurn) return; drawing=true; ctx.beginPath(); };
-            canvas.onmousemove = (e) => {
-                if(!drawing || !isTurn) return;
-                const rect = canvas.getBoundingClientRect();
-                const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-                const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+        function initDraw() {
+            const cvs = document.getElementById('canvas'); ctx = cvs.getContext('2d');
+            cvs.onmousedown = () => { drawing = true; ctx.beginPath(); };
+            cvs.onmousemove = (e) => {
+                if(!drawing) return;
+                const r = cvs.getBoundingClientRect();
+                const x = (e.clientX - r.left) * (400/r.width);
+                const y = (e.clientY - r.top) * (400/r.height);
                 ctx.lineTo(x, y); ctx.stroke();
-                socket.emit('drawing', { roomId: myRoom, x, y, type: 'line' });
+                socket.emit('drawing', { roomId: curRoom, x, y, type:'line' });
             };
-            canvas.onmouseup = () => { drawing=false; socket.emit('drawing', { roomId: myRoom, type: 'end' }); };
+            cvs.onmouseup = () => drawing = false;
         }
-        socket.on('drawing', (data) => {
-            if(!ctx) return;
-            if(data.type === 'line') { ctx.lineTo(data.x, data.y); ctx.stroke(); }
-            else ctx.beginPath();
-        });
-        function clearCanvas() { ctx.clearRect(0,0,400,400); socket.emit('drawing', { roomId: myRoom, type: 'clear' }); }
-        socket.on('drawing', (data) => { if(data.type === 'clear') ctx.clearRect(0,0,400,400); });
+        socket.on('drawing', (d) => { if(d.type==='line'){ ctx.lineTo(d.x, d.y); ctx.stroke(); } });
     </script>
 </body>
 </html>
