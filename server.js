@@ -10,12 +10,11 @@ const io = new Server(server, { cors: { origin: "*" } });
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
-const ADMIN_KEY = "1010215";
 
 io.on('connection', (socket) => {
     socket.on('create_room', () => {
         const roomId = Math.floor(1000 + Math.random() * 9000).toString();
-        rooms[roomId] = { host: socket.id, players: [], gameType: "大廳", turnIdx: 0, currentRound: 1, totalRounds: 1, bingoMarked: [] };
+        rooms[roomId] = { host: socket.id, players: [], gameType: "大廳", turnIdx: 0, bingoGoal: 3, votes: {} };
         socket.emit('room_created', { roomId });
     });
 
@@ -25,7 +24,7 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         socket.roomId = roomId;
         socket.username = username;
-        rooms[roomId].players.push({ id: socket.id, name: username, score: 0, ready: false });
+        rooms[roomId].players.push({ id: socket.id, name: username, score: 0, ready: false, isOut: false });
         syncData(roomId);
     });
 
@@ -33,64 +32,62 @@ io.on('connection', (socket) => {
         const room = rooms[data.roomId];
         if (!room) return;
         room.gameType = data.gameType;
-        room.totalRounds = parseInt(data.settings.rounds) || 1;
-        room.turnIdx = 0; room.currentRound = 1;
-        room.players.forEach(p => { p.score = 0; p.ready = false; });
+        room.players.forEach(p => { p.score = 0; p.ready = false; p.isOut = false; });
 
-        if (data.gameType === 'draw') sendDrawTurn(data.roomId);
-        else if (data.gameType === 'spy') {
-            const pairs = [["西瓜", "香瓜"], ["原子筆", "鉛筆"], ["火鍋", "烤肉"]];
+        if (data.gameType === 'spy') {
+            const pairs = [["蘋果", "水梨"], ["洗髮精", "沐浴乳"], ["周杰倫", "陳奕迅"]];
             const pair = pairs[Math.floor(Math.random()*pairs.length)];
             const spyIdx = Math.floor(Math.random() * room.players.length);
+            room.votes = {};
             room.players.forEach((p, idx) => {
-                io.to(p.id).emit('game_begin', { gameType: 'spy', word: idx === spyIdx ? pair[1] : pair[0] });
+                io.to(p.id).emit('game_begin', { 
+                    gameType: 'spy', 
+                    word: idx === spyIdx ? pair[1] : pair[0],
+                    isSpy: idx === spyIdx 
+                });
             });
-        }
-        else if (data.gameType === 'bingo') io.to(data.roomId).emit('game_begin', { gameType: 'bingo_prepare' });
-    });
-
-    function sendDrawTurn(roomId) {
-        const room = rooms[roomId];
-        if (room.currentRound > room.totalRounds) return io.to(roomId).emit('game_over', { scores: room.players.sort((a,b)=>b.score-a.score) });
-        const drawer = room.players[room.turnIdx];
-        io.to(roomId).emit('game_begin', { gameType: 'draw', drawerId: drawer.id, drawerName: drawer.name, roundInfo: `第 ${room.currentRound}/${room.totalRounds} 輪` });
-    }
-
-    socket.on('draw_submit_word', (d) => { if(rooms[d.roomId]) rooms[d.roomId].currentWord = d.word; });
-    socket.on('draw_guess', (d) => {
-        const room = rooms[d.roomId];
-        if (room && d.guess.trim() === room.currentWord?.trim()) {
-            room.players.find(p => p.id === socket.id).score += 2;
-            room.turnIdx++;
-            if (room.turnIdx >= room.players.length) { room.turnIdx = 0; room.currentRound++; }
-            io.to(d.roomId).emit('toast', `${socket.username} 答對了！`, '#16a34a');
-            setTimeout(() => sendDrawTurn(d.roomId), 1500);
+        } else if (data.gameType === 'bingo') {
+            room.bingoGoal = parseInt(data.settings.goal) || 3;
+            io.to(data.roomId).emit('game_begin', { gameType: 'bingo_prepare', goal: room.bingoGoal });
         }
     });
 
-    socket.on('bingo_ready', (d) => {
+    // 誰是臥底：投票邏輯
+    socket.on('spy_vote', (d) => {
         const room = rooms[d.roomId];
-        const p = room.players.find(p => p.id === socket.id);
-        if(p) { p.ready = true; p.bingoBoard = d.board; }
-        if (room.players.every(pl => pl.ready)) { room.turnIdx = 0; room.bingoMarked = []; sendBingoTurn(d.roomId); }
+        room.votes[socket.id] = d.targetId;
+        const voteCount = Object.keys(room.votes).length;
+        const activePlayers = room.players.filter(p => !p.isOut);
+        if (voteCount >= activePlayers.length) {
+            // 計算最高票
+            const counts = {};
+            Object.values(room.votes).forEach(id => counts[id] = (counts[id] || 0) + 1);
+            const sorted = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+            const kickedId = sorted[0][0];
+            const kickedPlayer = room.players.find(p => p.id === kickedId);
+            kickedPlayer.isOut = true;
+            io.to(d.roomId).emit('spy_vote_result', { 
+                kickedName: kickedPlayer.name, 
+                isSpy: kickedPlayer.isSpy,
+                players: room.players 
+            });
+            room.votes = {}; // 清空投票
+        }
     });
 
-    function sendBingoTurn(roomId) {
-        const room = rooms[roomId];
-        io.to(roomId).emit('bingo_start', { turnName: room.players[room.turnIdx].name, turnId: room.players[room.turnIdx].id, marked: room.bingoMarked });
-    }
-
+    // 賓果：判斷贏家
     socket.on('bingo_pick', (d) => {
         const room = rooms[d.roomId];
+        room.bingoMarked = room.bingoMarked || [];
         room.bingoMarked.push(parseInt(d.num));
         room.turnIdx = (room.turnIdx + 1) % room.players.length;
-        sendBingoTurn(d.roomId);
+        io.to(d.roomId).emit('bingo_start', { turnId: room.players[room.turnIdx].id, marked: room.bingoMarked });
     });
 
-    socket.on('draw_stroke', (d) => socket.to(d.roomId).emit('receive_stroke', d));
-    socket.on('admin_login', (k) => { if(k===ADMIN_KEY) { socket.join('admin_group'); socket.emit('admin_auth_success'); } });
+    socket.on('bingo_win', (d) => {
+        io.to(d.roomId).emit('game_over', { winner: socket.username });
+    });
+
     function syncData(rid) { if(rooms[rid]) io.to(rid).emit('room_update', { roomId: rid, players: rooms[rid].players, hostId: rooms[rid].host }); }
 });
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(process.env.PORT || 3000);
