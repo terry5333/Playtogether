@@ -6,49 +6,66 @@
     <title>PARTY BOX 旗艦版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: white; }
+        body { background-color: #0f172a; color: white; font-family: sans-serif; }
         .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
         .hidden { display: none !important; }
-        .player-tag { background: #1e293b; padding: 4px 12px; border-radius: 99px; font-size: 12px; border: 1px solid #334155; }
+        .player-tag { background: #1e293b; padding: 4px 12px; border-radius: 99px; font-size: 12px; border: 1px solid #475569; }
     </style>
 </head>
 <body class="p-4">
 
     <main id="view-menu" class="max-w-md mx-auto space-y-4 pt-20">
-        <h1 onclick="openAdmin()" class="text-4xl font-black text-center mb-10 italic cursor-pointer">PARTY<span class="text-blue-500">BOX</span></h1>
-        <button onclick="go('create')" class="w-full glass p-6 rounded-2xl text-left border-l-4 border-blue-500 font-bold text-xl">創建房間</button>
-        <button onclick="go('join')" class="w-full glass p-6 rounded-2xl text-left border-l-4 border-orange-500 font-bold text-xl">加入房間</button>
+        <h1 id="title-main" class="text-4xl font-black text-center mb-10 italic cursor-pointer">PARTY<span class="text-blue-500">BOX</span></h1>
+        <button onclick="goAction('create')" class="w-full glass p-6 rounded-2xl text-left border-l-4 border-blue-500 font-bold text-xl">創建房間</button>
+        <button onclick="goAction('join')" class="w-full glass p-6 rounded-2xl text-left border-l-4 border-orange-500 font-bold text-xl">加入房間</button>
     </main>
 
     <section id="view-lobby" class="hidden max-w-md mx-auto space-y-4">
         <div class="glass p-6 rounded-[2rem] text-center space-y-6">
-            <h2 id="room-id" class="text-2xl font-black text-blue-400">房號：----</h2>
+            <h2 id="room-display" class="text-2xl font-black text-blue-400">房號：----</h2>
             <div id="player-list" class="flex flex-wrap gap-2 justify-center"></div>
             
-            <div id="host-controls" class="hidden space-y-3 pt-4 border-t border-slate-700">
-                <button onclick="start('bingo')" class="w-full bg-slate-800 p-4 rounded-xl font-bold border-l-4 border-blue-500">賓果連連看</button>
-                <button onclick="start('spy')" class="w-full bg-slate-800 p-4 rounded-xl font-bold border-l-4 border-green-500">誰是臥底</button>
+            <div id="host-controls" class="hidden space-y-3 pt-6 border-t border-slate-700">
+                <button onclick="reqStart('bingo')" class="w-full bg-slate-800 p-4 rounded-xl font-bold border-l-4 border-blue-500 hover:bg-slate-700">開始：賓果連連看</button>
+                <button onclick="reqStart('spy')" class="w-full bg-slate-800 p-4 rounded-xl font-bold border-l-4 border-green-500 hover:bg-slate-700">開始：誰是臥底</button>
             </div>
-            <p id="wait-msg" class="text-slate-500 animate-pulse">等待房主選擇模式...</p>
+            <p id="wait-msg" class="text-slate-500 animate-pulse font-bold">等待房主選擇模式...</p>
         </div>
     </section>
 
-    <section id="view-admin" class="hidden fixed inset-0 bg-slate-950 p-6 overflow-y-auto z-[100]">
-        <h2 class="text-red-500 font-black text-2xl mb-4">管理員後台</h2>
-        <div id="admin-list" class="space-y-4"></div>
-        <button onclick="location.reload()" class="mt-6 text-slate-500">退出</button>
+    <section id="view-admin" class="hidden fixed inset-0 bg-slate-950 z-[200] p-6 overflow-y-auto font-mono">
+        <div class="flex justify-between items-center mb-6 border-b border-slate-800 pb-2">
+            <h2 class="text-red-500 font-black">後台管理系統</h2>
+            <button onclick="document.getElementById('view-admin').classList.add('hidden')" class="text-xs">關閉</button>
+        </div>
+        <div id="admin-rooms-list" class="space-y-4"></div>
     </section>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myRoom, myName;
+        let myRoom, myName, clickCount = 0;
 
-        function go(type) {
-            myName = prompt("輸入暱稱");
+        // 1. 隱藏入口 (連點標題 5 下)
+        document.getElementById('title-main').onclick = () => {
+            clickCount++;
+            if(clickCount >= 5) {
+                const pass = prompt("請輸入管理員密鑰：");
+                if(pass === "admin888") openAdmin(pass);
+                clickCount = 0;
+            }
+            setTimeout(() => clickCount = 0, 3000);
+        };
+
+        // 2. 房間邏輯
+        function goAction(type) {
+            myName = prompt("請輸入你的暱稱：");
             if(!myName) return;
             if(type === 'create') socket.emit('create_room');
-            else socket.emit('join_room', { roomId: prompt("輸入房號"), username: myName });
+            else {
+                myRoom = prompt("請輸入 4 位數房號：");
+                socket.emit('join_room', { roomId: myRoom, username: myName });
+            }
         }
 
         socket.on('room_created', d => socket.emit('join_room', { roomId: d.roomId, username: myName }));
@@ -57,9 +74,8 @@
             myRoom = d.roomId;
             document.getElementById('view-menu').classList.add('hidden');
             document.getElementById('view-lobby').classList.remove('hidden');
-            document.getElementById('room-id').innerText = "房號：" + d.roomId;
+            document.getElementById('room-display').innerText = "房號：" + d.roomId;
 
-            // 房主判斷與星星 ⭐
             const isHost = (socket.id === d.hostId);
             document.getElementById('host-controls').classList.toggle('hidden', !isHost);
             document.getElementById('wait-msg').classList.toggle('hidden', isHost);
@@ -69,36 +85,48 @@
             ).join('');
         });
 
-        function start(game) {
-            socket.emit('start_game_with_config', { roomId: myRoom, gameType: game });
-        }
+        function reqStart(mode) { socket.emit('start_game_with_config', { roomId: myRoom, gameType: mode }); }
 
-        socket.on('game_begin', d => alert("遊戲開始：" + d.gameType)); // 這裡可接轉場
+        socket.on('game_begin', d => alert("正在轉場到：" + d.gameType));
         socket.on('admin_msg', m => { alert(m); location.reload(); });
+        socket.on('error_msg', m => alert(m));
 
-        // 管理員系統
-        async function openAdmin() {
-            const key = prompt("管理密鑰");
-            if(key !== "admin888") return;
-            const res = await fetch('/admin/full_data?key=admin888');
-            const data = await res.json();
+        // 3. 管理員功能
+        async function openAdmin(key) {
             document.getElementById('view-admin').classList.remove('hidden');
-            document.getElementById('admin-list').innerHTML = Object.entries(data).map(([id, r]) => `
+            const res = await fetch(`/admin/full_data?key=${key}`);
+            const rooms = await res.json();
+            const list = document.getElementById('admin-rooms-list');
+            list.innerHTML = Object.entries(rooms).map(([rid, r]) => `
                 <div class="glass p-4 rounded-xl border-l-4 border-red-500">
-                    <b>房號：${id}</b>
-                    <button onclick="closeRoom('${id}')" class="text-xs bg-red-900 px-2 py-1 ml-4">關閉房間</button>
-                    <div class="text-xs mt-2 text-slate-400">玩家：${r.players.map(p => p.name).join(', ')}</div>
+                    <div class="flex justify-between">
+                        <b>房間 ${rid}</b>
+                        <button onclick="closeRoom('${rid}', '${key}')" class="bg-red-900 px-2 text-[10px] rounded">關閉房間</button>
+                    </div>
+                    <div class="mt-2 space-y-1">
+                        ${r.players.map(p => `
+                            <div class="flex justify-between text-xs">
+                                <span>${p.name}</span>
+                                <button onclick="kick('${rid}', '${p.id}', '${key}')" class="text-red-500">踢出</button>
+                            </div>
+                        `).join('')}
+                    </div>
                 </div>
             `).join('');
         }
 
-        async function closeRoom(id) {
+        async function closeRoom(rid, key) {
             await fetch('/admin/close_room', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ key: 'admin888', roomId: id })
+                body: JSON.stringify({ key, roomId: rid })
             });
-            openAdmin();
+            openAdmin(key);
+        }
+
+        function kick(rid, pid, key) {
+            socket.emit('admin_kick_player', { key, roomId: rid, targetId: pid });
+            setTimeout(() => openAdmin(key), 500);
         }
     </script>
 </body>
