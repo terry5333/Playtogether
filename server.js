@@ -10,23 +10,21 @@ const io = new Server(server, { cors: { origin: "*" } });
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
-const ADMIN_KEY = "admin888";
 
 io.on('connection', (socket) => {
-    // 1. 創建房間邏輯
+    // 1. 創建房間
     socket.on('create_room', () => {
         const roomId = Math.floor(1000 + Math.random() * 9000).toString();
         rooms[roomId] = {
             host: socket.id, // 創建者即為房主
             players: [],
             gameStarted: false,
-            scores: {},
-            currentTurnIdx: 0
+            scores: {}
         };
         socket.emit('room_created', { roomId });
     });
 
-    // 2. 加入房間邏輯
+    // 2. 加入房間
     socket.on('join_room', (data) => {
         const { roomId, username } = data;
         if (!rooms[roomId]) return socket.emit('error_msg', '房間不存在');
@@ -35,16 +33,16 @@ io.on('connection', (socket) => {
         socket.roomId = roomId;
         socket.username = username;
 
-        // 如果房主斷線，讓第一個加入的補位
+        // 如果原房主斷線，讓第一個進來的人補位
         if (!rooms[roomId].host) rooms[roomId].host = socket.id;
 
-        // 確保不重複加入名單
+        // 確保名單不重複
         if (!rooms[roomId].players.find(p => p.id === socket.id)) {
             rooms[roomId].players.push({ id: socket.id, name: username });
             rooms[roomId].scores[username] = 0;
         }
 
-        // 廣播最新房間狀態 (包含 hostId 用於判定房主權限)
+        // 廣播給房間所有人，包含 hostId 供前端判定
         io.to(roomId).emit('room_update', {
             roomId: roomId,
             players: rooms[roomId].players,
@@ -53,7 +51,7 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 3. 房主發起遊戲
+    // 3. 房主啟動遊戲
     socket.on('start_game_with_config', (data) => {
         const room = rooms[data.roomId];
         if (room && room.host === socket.id) {
@@ -82,4 +80,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`伺服器成功啟動於端口 ${PORT}`));
+server.listen(PORT, () => console.log(`Server is running on ${PORT}`));
