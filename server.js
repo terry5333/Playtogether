@@ -12,60 +12,58 @@ app.use(express.static(path.join(__dirname, 'public')));
 let rooms = {};
 
 io.on('connection', (socket) => {
-    // --- Admin 管理功能 ---
-    socket.on('admin_get_all_rooms', () => {
-        const roomData = Object.keys(rooms).map(rid => ({
+    // --- Admin 管理端指令 ---
+    socket.on('admin_refresh', () => {
+        const data = Object.keys(rooms).map(rid => ({
             id: rid,
             gameType: rooms[rid].gameType || 'Lobby',
-            hostName: rooms[rid].players.find(p => p.id === rooms[rid].host)?.name || '未知',
-            playerCount: rooms[rid].players.length,
-            players: rooms[rid].players.map(p => ({ id: p.id, name: p.name }))
+            players: rooms[rid].players.map(p => ({ id: p.id, name: p.name })),
+            hostName: rooms[rid].players.find(p => p.id === rooms[rid].host)?.name || '未知'
         }));
-        socket.emit('admin_room_list', roomData);
+        socket.emit('admin_data', data);
     });
 
-    socket.on('admin_kick_player', (data) => {
-        const room = rooms[data.roomId];
-        if (room) {
-            io.to(data.playerId).emit('kicked');
-            room.players = room.players.filter(p => p.id !== data.playerId);
-            io.to(data.roomId).emit('room_update', { roomId: data.roomId, players: room.players, hostId: room.host });
+    socket.on('admin_kick', (d) => {
+        const r = rooms[d.rid];
+        if (r) {
+            io.to(d.pid).emit('kicked_signal');
+            r.players = r.players.filter(p => p.id !== d.pid);
+            io.to(d.rid).emit('room_update', { roomId: d.rid, players: r.players, hostId: r.host });
         }
     });
 
-    socket.on('admin_dissolve_room', (rid) => {
-        io.to(rid).emit('room_dissolved');
+    socket.on('admin_kill_room', (rid) => {
+        io.to(rid).emit('room_terminated');
         delete rooms[rid];
     });
 
-    // --- 基礎房間功能 ---
+    // --- 玩家端指令 (保持原有邏輯並修復 Bingo) ---
     socket.on('create_room', () => {
-        const roomId = Math.floor(1000 + Math.random() * 9000).toString();
-        rooms[roomId] = { host: socket.id, players: [], bingoMarked: [], bingoGoal: 3, gameType: 'Lobby' };
-        socket.emit('room_created', { roomId });
+        const rid = Math.floor(1000 + Math.random() * 9000).toString();
+        rooms[rid] = { host: socket.id, players: [], bingoMarked: [], bingoGoal: 3, gameType: 'Lobby' };
+        socket.emit('room_created', { roomId: rid });
     });
 
     socket.on('join_room', (d) => {
         if (!rooms[d.roomId]) return socket.emit('toast', '房間不存在');
         socket.join(d.roomId);
-        socket.roomId = d.roomId;
-        rooms[d.roomId].players.push({ id: socket.id, name: d.username, score: 0 });
+        rooms[d.roomId].players.push({ id: socket.id, name: d.username });
         io.to(d.roomId).emit('room_update', { roomId: d.roomId, players: rooms[d.roomId].players, hostId: rooms[d.roomId].host });
     });
 
     socket.on('start_game', (d) => {
-        const room = rooms[d.roomId];
-        if (!room) return;
-        room.gameType = d.gameType;
-        room.bingoGoal = parseInt(d.goal) || 3;
-        room.bingoMarked = [];
-        io.to(d.roomId).emit('game_begin', { gameType: d.gameType, goal: room.bingoGoal });
+        const r = rooms[d.roomId];
+        if (r) {
+            r.gameType = d.gameType;
+            r.bingoGoal = parseInt(d.goal);
+            r.bingoMarked = [];
+            io.to(d.roomId).emit('game_begin', { type: d.gameType, goal: r.bingoGoal });
+        }
     });
 
-    // Bingo 同步與判定修復
     socket.on('bingo_pick', (d) => {
         const r = rooms[d.roomId];
-        if (!r.bingoMarked.includes(parseInt(d.num))) {
+        if (r && !r.bingoMarked.includes(parseInt(d.num))) {
             r.bingoMarked.push(parseInt(d.num));
             io.to(d.roomId).emit('bingo_sync', { marked: r.bingoMarked });
         }
