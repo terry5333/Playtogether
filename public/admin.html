@@ -2,42 +2,31 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>上帝視角 Admin Pro</title>
+    <title>Admin Panel</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body class="bg-black text-white p-8">
-    <div id="auth-view" class="text-center mt-20">
-        <input type="password" id="key" placeholder="密鑰" class="bg-gray-900 p-4 rounded text-center">
-        <button onclick="socket.emit('admin_login', document.getElementById('key').value)" class="bg-blue-600 p-4 rounded">登入</button>
+    <div id="auth-view" class="text-center mt-10">
+        <input type="password" id="key" placeholder="1010215" class="bg-gray-900 p-2 rounded">
+        <button onclick="socket.emit('admin_login', document.getElementById('key').value)" class="bg-blue-600 p-2 rounded">登入</button>
     </div>
-
     <div id="main-view" class="hidden">
-        <h1 class="text-2xl font-bold mb-6">實時房間管理員</h1>
-        <div id="room-list" class="grid gap-6"></div>
+        <div id="room-list" class="grid gap-4"></div>
     </div>
-
     <script>
         const socket = io();
         socket.on('admin_auth_success', () => { document.getElementById('auth-view').hidden = true; document.getElementById('main-view').classList.remove('hidden'); });
-
         socket.on('admin_monitor_update', (rooms) => {
-            document.getElementById('room-list').innerHTML = rooms.map(room => `
-                <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800">
-                    <div class="flex justify-between mb-4">
-                        <h2 class="font-bold text-xl text-blue-400">#${room.id} (${room.gameType})</h2>
-                        <button onclick="socket.emit('admin_close_room', '${room.id}')" class="bg-red-600 px-3 py-1 rounded text-xs">關閉房間</button>
+            document.getElementById('room-list').innerHTML = rooms.map(r => `
+                <div class="bg-gray-900 p-4 rounded-xl border border-gray-700">
+                    <div class="flex justify-between">
+                        <b>房間: #${r.id} (${r.gameType})</b>
+                        <button onclick="socket.emit('admin_kick', {roomId:'${r.id}', playerId:'${r.host}'})" class="text-red-500 text-xs">踢出房主</button>
                     </div>
-                    <div class="space-y-4">
-                        ${room.players.map(p => `
-                            <div class="bg-gray-800 p-3 rounded-xl flex justify-between items-center">
-                                <div>
-                                    <div class="font-bold">${p.name} (分: ${p.score})</div>
-                                    <div class="text-[10px] text-gray-500">賓果卡: ${p.bingoBoard.slice(0,5).join(',')}...</div>
-                                </div>
-                                <button onclick="socket.emit('admin_kick', {roomId:'${room.id}', playerId:'${p.id}'})" class="text-red-400 text-xs">踢出</button>
-                            </div>
-                        `).join('')}
+                    <div class="text-[10px] mt-2 text-gray-400">當前題目: ${r.currentWord || '未出題'} | 賓果點擊數: ${r.bingoMarked.length}</div>
+                    <div class="mt-2 space-y-1">
+                        ${r.players.map(p => `<div class="flex justify-between text-xs"><span>${p.name} (詞: ${p.word || '無'})</span><button onclick="socket.emit('admin_kick', {roomId:'${r.id}', playerId:'${p.id}'})" class="text-gray-500">踢人</button></div>`).join('')}
                     </div>
                 </div>
             `).join('');
