@@ -2,120 +2,152 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Party Box 2.0</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PARTY BOX 2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: #f8fafc; }
-        .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
-        .chat-box { height: 150px; overflow-y: auto; scrollbar-width: thin; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; overflow-x: hidden; }
+        .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+        .chat-box { height: 120px; overflow-y: auto; }
         .hidden { display: none !important; }
     </style>
 </head>
-<body class="p-4">
+<body class="p-6">
 
-    <div id="login-zone" class="max-w-md mx-auto mt-20 space-y-4">
-        <h1 class="text-4xl font-black text-center mb-8">PARTY BOX</h1>
-        <input type="text" id="username" placeholder="你的暱稱" class="w-full p-4 bg-slate-800 rounded-2xl outline-none">
-        <input type="text" id="roomIdInput" placeholder="房號" class="w-full p-4 bg-slate-800 rounded-2xl outline-none">
-        <button onclick="join()" class="w-full bg-blue-600 p-4 rounded-2xl font-black">進入遊戲</button>
-    </div>
+    <header class="text-center py-10" id="header-logo">
+        <h1 class="text-5xl font-black tracking-tighter">PARTY<span class="text-blue-500">BOX.</span></h1>
+    </header>
 
-    <div id="lobby-zone" class="hidden max-w-md mx-auto space-y-4">
-        <div class="glass-card p-6 rounded-[2rem]">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold">房號：<span id="room-id-display" class="text-blue-400">----</span></h2>
-                <span class="bg-slate-700 px-3 py-1 rounded-full text-xs" id="player-count">0 人在線</span>
+    <main id="main-menu" class="max-w-md mx-auto space-y-4">
+        <div onclick="showAction('create')" class="glass-card p-8 rounded-[2.5rem] cursor-pointer hover:scale-105 transition border-l-8 border-blue-500">
+            <h2 class="text-2xl font-black">創建房間</h2>
+            <p class="text-slate-400 text-sm mt-1">開啟一個新房間並成為房主</p>
+        </div>
+        <div onclick="showAction('join')" class="glass-card p-8 rounded-[2.5rem] cursor-pointer hover:scale-105 transition border-l-8 border-orange-500">
+            <h2 class="text-2xl font-black">加入房間</h2>
+            <p class="text-slate-400 text-sm mt-1">輸入房號，進入好友的房間</p>
+        </div>
+    </main>
+
+    <section id="action-panel" class="hidden max-w-md mx-auto space-y-4">
+        <input type="text" id="username" placeholder="你的暱稱" class="w-full bg-slate-800 p-4 rounded-2xl outline-none ring-2 ring-transparent focus:ring-blue-500 transition">
+        <div id="join-field" class="hidden">
+            <input type="text" id="roomIdInput" placeholder="4 位數房號" class="w-full bg-slate-800 p-4 rounded-2xl outline-none ring-2 ring-transparent focus:ring-orange-500 transition">
+        </div>
+        <button id="confirm-btn" class="w-full bg-blue-600 p-4 rounded-2xl font-black text-lg shadow-xl shadow-blue-900/40">確認進入</button>
+        <button onclick="location.reload()" class="w-full text-slate-500 font-bold text-sm">返回主選單</button>
+    </section>
+
+    <section id="lobby-zone" class="hidden max-w-md mx-auto space-y-4">
+        <div class="glass-card p-6 rounded-[2.5rem] space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-2xl font-black">房號：<span id="display-room" class="text-blue-500">----</span></h2>
+                <div class="bg-slate-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest" id="player-count">0 Players</div>
             </div>
 
-            <div id="player-list" class="flex flex-wrap gap-2 mb-6 text-sm text-slate-400">
-                </div>
+            <div id="player-list" class="flex flex-wrap gap-2 py-2"></div>
 
             <div id="host-controls" class="hidden border-t border-slate-700 pt-6 space-y-4">
-                <select id="gameType" class="w-full bg-slate-900 p-3 rounded-xl font-bold">
+                <select id="gameType" class="w-full bg-slate-900 p-4 rounded-2xl font-bold outline-none border border-slate-700">
                     <option value="bingo">賓果連連看</option>
                     <option value="spy">誰是臥底</option>
                 </select>
-                <button onclick="startGame()" class="w-full bg-orange-500 p-4 rounded-2xl font-black shadow-lg shadow-orange-900/20">開始遊戲</button>
+                <button onclick="sendStart()" class="w-full bg-orange-500 p-4 rounded-2xl font-black text-lg shadow-xl shadow-orange-900/30">開始遊戲</button>
             </div>
-
-            <div id="wait-msg" class="text-center text-slate-500 py-4 italic">等待房主開始遊戲...</div>
+            
+            <div id="wait-msg" class="text-center text-slate-500 py-4 font-bold animate-pulse">等待房主開始...</div>
         </div>
 
-        <div class="glass-card p-4 rounded-[2rem] space-y-2">
-            <div id="chat-content" class="chat-box space-y-2 p-2 bg-slate-900/50 rounded-xl text-sm">
-                <p class="text-slate-500 italic">歡迎來到聊天室！</p>
-            </div>
+        <div class="glass-card p-5 rounded-[2.5rem] space-y-4">
+            <div id="chat-content" class="chat-box space-y-2 p-2 rounded-xl text-sm"></div>
             <div class="flex gap-2">
-                <input type="text" id="chat-input" placeholder="說點什麼..." class="flex-1 bg-slate-800 p-3 rounded-xl outline-none text-sm">
-                <button onclick="sendMsg()" class="bg-blue-600 px-4 rounded-xl font-bold">發送</button>
+                <input type="text" id="chat-input" placeholder="說點什麼..." class="flex-1 bg-slate-800 p-3 rounded-xl outline-none text-xs">
+                <button onclick="sendChat()" class="bg-blue-600 px-4 rounded-xl font-black text-xs">發送</button>
             </div>
         </div>
-    </div>
+    </section>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myName, myRoom;
+        let myRoom = "", myName = "", currentAction = "";
 
-        function join() {
+        function showAction(type) {
+            currentAction = type;
+            document.getElementById('main-menu').classList.add('hidden');
+            document.getElementById('action-panel').classList.remove('hidden');
+            document.getElementById('join-field').classList.toggle('hidden', type === 'create');
+            document.getElementById('confirm-btn').onclick = type === 'create' ? createRoom : joinRoom;
+        }
+
+        function createRoom() { socket.emit('create_room'); }
+        socket.on('room_created', (data) => {
+            myRoom = data.roomId;
+            joinRoom();
+        });
+
+        function joinRoom() {
             myName = document.getElementById('username').value;
-            myRoom = document.getElementById('roomIdInput').value;
-            if(!myName || !myRoom) return alert("請填寫完整");
+            const rid = currentAction === 'create' ? myRoom : document.getElementById('roomIdInput').value;
+            if(!myName || !rid) return alert("請填寫完整資訊");
+            myRoom = rid;
+            socket.emit('join_room', { roomId: rid, username: myName });
             
-            socket.emit('join_room', { roomId: myRoom, username: myName });
-            document.getElementById('login-zone').classList.add('hidden');
+            document.getElementById('action-panel').classList.add('hidden');
+            document.getElementById('header-logo').classList.add('hidden');
             document.getElementById('lobby-zone').classList.remove('hidden');
-            document.getElementById('room-id-display').innerText = myRoom;
+            document.getElementById('display-room').innerText = rid;
         }
 
         socket.on('room_update', (data) => {
-            // 更新人數
-            document.getElementById('player-count').innerText = `${data.players.length} 人在線`;
+            document.getElementById('player-count').innerText = `${data.players.length} Players`;
             
-            // 更新玩家清單
+            // 更新玩家標籤
             const list = document.getElementById('player-list');
             list.innerHTML = data.players.map(p => `
-                <span class="bg-slate-800 px-3 py-1 rounded-lg border border-slate-700">
+                <div class="bg-slate-800 px-4 py-2 rounded-xl border border-slate-700 text-xs font-bold">
                     ${p.id === data.hostId ? '👑 ' : ''}${p.name}
-                </span>
+                </div>
             `).join('');
 
-            // 修復：判斷自己是否為房主來顯示開始按鈕
+            // 房主按鈕顯示判定
             const isHost = socket.id === data.hostId;
             document.getElementById('host-controls').classList.toggle('hidden', !isHost);
             document.getElementById('wait-msg').classList.toggle('hidden', isHost);
         });
 
-        // 聊天室功能
-        function sendMsg() {
+        // 聊天系統
+        function sendChat() {
             const input = document.getElementById('chat-input');
             if(!input.value) return;
-            socket.emit('send_msg', { roomId: myRoom, username: myName, text: input.value });
+            socket.emit('send_chat', { roomId: myRoom, user: myName, text: input.value });
             input.value = "";
         }
 
-        socket.on('receive_msg', (data) => {
+        socket.on('receive_chat', (data) => {
             const content = document.getElementById('chat-content');
             content.innerHTML += `
-                <div>
-                    <span class="text-blue-400 font-bold">${data.user}</span> 
-                    <span class="text-[10px] text-slate-500">${data.time}</span>
-                    <p class="text-slate-300">${data.text}</p>
+                <div class="mb-2">
+                    <span class="text-blue-400 font-black text-[10px] uppercase">${data.user}</span>
+                    <span class="text-slate-600 text-[9px] ml-1">${data.time}</span>
+                    <p class="text-slate-300 mt-0.5">${data.text}</p>
                 </div>
             `;
             content.scrollTop = content.scrollHeight;
         });
 
-        function startGame() {
+        function sendStart() {
             const type = document.getElementById('gameType').value;
             socket.emit('start_game', { roomId: myRoom, gameType: type });
         }
 
         socket.on('game_begin', (data) => {
-            alert(`遊戲 [${data.gameType}] 即將開始！`);
-            // 這裡連接你之前的 Bingo/Spy UI 切換邏輯
+            alert("遊戲開始：" + data.gameType);
+            // 轉場至對應遊戲 UI 邏輯
         });
+
+        socket.on('error_msg', (msg) => alert(msg));
     </script>
 </body>
 </html>
