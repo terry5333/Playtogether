@@ -1,173 +1,110 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Morandi 派對遊戲盒</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .bingo-cell { aspect-ratio: 1 / 1; transition: all 0.2s; }
-        .active-turn { border: 4px solid #f97316; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-    </style>
-</head>
-<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
 
-    <div id="lobby" class="flex items-center justify-center min-h-screen p-4">
-        <div class="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md space-y-6 border border-slate-100">
-            <h1 class="text-3xl font-extrabold text-center text-slate-800 tracking-tight">遊戲盒</h1>
-            <div class="space-y-4">
-                <input type="text" id="username" placeholder="輸入暱稱" class="w-full p-4 border rounded-2xl bg-slate-50 focus:ring-2 focus:ring-blue-400 outline-none transition">
-                <input type="text" id="roomId" placeholder="房間號碼" class="w-full p-4 border rounded-2xl bg-slate-50 focus:ring-2 focus:ring-blue-400 outline-none transition">
-                
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-xs font-bold text-slate-400 ml-2 mb-1 block uppercase">最大人數</label>
-                        <input type="number" id="maxPlayers" value="5" class="w-full p-3 border rounded-xl bg-slate-50 outline-none">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-400 ml-2 mb-1 block uppercase">勝利線數</label>
-                        <input type="number" id="winLines" value="3" class="w-full p-3 border rounded-xl bg-slate-50 outline-none">
-                    </div>
-                </div>
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-                <select id="gameSelect" class="w-full p-4 border rounded-2xl bg-slate-50 outline-none appearance-none">
-                    <option value="bingo">賓果連連看</option>
-                    <option value="spy">誰是臥底</option>
-                </select>
-                
-                <button onclick="confirmJoin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 transition-all active:scale-95">
-                    加入房間
-                </button>
-            </div>
-        </div>
-    </div>
+app.use(express.static(path.join(__dirname, 'public')));
 
-    <div id="game-area" class="hidden max-w-lg mx-auto p-4 py-8">
-        <div id="turn-status" class="text-center text-2xl font-black text-orange-500 mb-6 drop-shadow-sm"></div>
-        <div id="spy-timer" class="text-center font-mono text-red-500 mb-4 text-xl font-bold"></div>
+const rooms = {};
+const ADMIN_KEY = "admin123"; // 管理員密鑰
 
-        <div id="bingo-container" class="hidden space-y-4">
-            <div id="bingo-header" class="flex justify-between items-center bg-blue-50 p-3 rounded-2xl border border-blue-100">
-                <span id="fill-hint" class="text-sm font-bold text-blue-600">請設定號碼</span>
-                <button onclick="autoFillRandom()" class="text-xs bg-blue-500 text-white px-3 py-1.5 rounded-full font-bold">一鍵隨機</button>
-            </div>
-            <div id="bingo-grid" class="grid grid-cols-5 gap-2 bg-white p-3 rounded-3xl shadow-inner border-4 border-slate-100"></div>
-        </div>
-
-        <div id="spy-container" class="hidden space-y-4">
-            <div id="spy-card" class="bg-white p-8 rounded-3xl shadow-lg text-center border-b-8 border-blue-500"></div>
-            <div id="vote-area" class="grid grid-cols-2 gap-2 mt-6"></div>
-        </div>
-
-        <div id="host-controls" class="hidden mt-8">
-            <button onclick="sendStartGame()" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-orange-100 transition-all active:scale-95 text-lg">
-                開始遊戲
-            </button>
-        </div>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io(); // 優先定義
-        let curRoom = "";
-        let isHost = false;
-        let myPlayers = [];
-        window.isMyTurn = false;
-
-        function confirmJoin() {
-            const username = document.getElementById('username').value;
-            const roomId = document.getElementById('roomId').value;
-            const gameType = document.getElementById('gameSelect').value;
-            const maxPlayers = document.getElementById('maxPlayers').value;
-
-            if (username && roomId) {
-                curRoom = roomId;
-                socket.emit('join_room', { roomId, username, gameType, maxPlayers });
-                document.getElementById('lobby').classList.add('hidden');
-                document.getElementById('game-area').classList.remove('hidden');
-                
-                if (gameType === 'bingo') {
-                    document.getElementById('bingo-container').classList.remove('hidden');
-                    initBingoBoard();
-                } else {
-                    document.getElementById('spy-container').classList.remove('hidden');
-                }
-            } else {
-                alert("請填寫完整資訊");
-            }
-        }
-
-        function sendStartGame() {
-            const lines = document.getElementById('winLines').value;
-            socket.emit('start_game', { roomId: curRoom, winLines: lines });
-        }
-
-        socket.on('room_update', (room) => {
-            isHost = (socket.id === room.host);
-            myPlayers = room.players;
-            if (isHost && !room.gameStarted) {
-                document.getElementById('host-controls').classList.remove('hidden');
-            }
-        });
-
-        socket.on('game_begin', (data) => {
-            document.getElementById('host-controls').classList.add('hidden');
-            updateTurnDisplay(data.turnId);
-            if (data.gameType === 'spy') startSpyGame();
-        });
-
-        socket.on('next_turn', (data) => updateTurnDisplay(data.turnId));
-
-        function updateTurnDisplay(turnId) {
-            window.isMyTurn = (socket.id === turnId);
-            const statusEl = document.getElementById('turn-status');
-            statusEl.innerText = window.isMyTurn ? "🎯 輪到你的回合！" : "⌛ 等待對手...";
-            document.getElementById('bingo-grid').className = `grid grid-cols-5 gap-2 bg-white p-3 rounded-3xl shadow-inner border-4 ${window.isMyTurn ? 'border-orange-400' : 'border-slate-100'}`;
-        }
-    </script>
-        // server.js 
-
-// 7. 管理員 API 強化
+// 管理員數據接口
 app.get('/admin-data', (req, res) => {
-    const adminKey = "terry"; 
-    if (req.query.key === adminKey) {
-        const stats = {
-            totalRooms: Object.keys(rooms).length,
-            rooms: Object.entries(rooms).map(([id, data]) => ({
-                id,
-                gameType: data.gameType,
-                hostId: data.host, // 房長 ID
-                hostName: data.players.find(p => p.id === data.host)?.name || "未知", // 誰創建的
-                playerCount: data.players.length,
-                players: data.players.map(p => ({ id: p.id, name: p.name })), // 房間裡面有誰
-                started: data.gameStarted
-            }))
-        };
-        res.json(stats);
+    if (req.query.key === ADMIN_KEY) {
+        const stats = Object.entries(rooms).map(([id, data]) => ({
+            id,
+            gameType: data.gameType,
+            hostName: data.players.find(p => p.id === data.host)?.name || "未知",
+            playerCount: data.players.length,
+            players: data.players.map(p => p.name),
+            started: data.gameStarted
+        }));
+        res.json({ totalRooms: stats.length, rooms: stats });
     } else {
-        res.status(403).send("密鑰錯誤");
+        res.status(403).send("拒絕訪問");
     }
 });
 
-// Socket 監聽：強制關閉房間
 io.on('connection', (socket) => {
-    // ... 原有的邏輯 ...
+    socket.on('join_room', (data) => {
+        const { roomId, username, gameType, maxPlayers } = data;
+        socket.join(roomId);
+        socket.roomId = roomId;
 
+        if (!rooms[roomId]) {
+            rooms[roomId] = { 
+                gameType, host: socket.id, players: [], 
+                gameStarted: false, winLines: 3, 
+                maxPlayers: parseInt(maxPlayers) || 10,
+                currentTurnIdx: 0, votes: {}
+            };
+        }
+
+        if (rooms[roomId].players.length < rooms[roomId].maxPlayers) {
+            rooms[roomId].players.push({ id: socket.id, name: username, isOut: false });
+            io.to(roomId).emit('room_update', rooms[roomId]);
+        } else {
+            socket.emit('error_msg', '房間已滿');
+        }
+    });
+
+    socket.on('start_game', (data) => {
+        const room = rooms[data.roomId];
+        if (!room || room.host !== socket.id) return;
+        room.gameStarted = true;
+        room.winLines = parseInt(data.winLines) || 3;
+        io.to(data.roomId).emit('game_begin', { turnId: room.players[0].id, winLines: room.winLines, gameType: room.gameType });
+        
+        if (room.gameType === 'spy') {
+            const wordPairs = [["香蕉", "芭樂"], ["電腦", "手機"]];
+            const pair = wordPairs[Math.floor(Math.random() * wordPairs.length)];
+            const spyIdx = Math.floor(Math.random() * room.players.length);
+            room.players.forEach((p, i) => {
+                io.to(p.id).emit('spy_setup', { role: (i === spyIdx) ? "臥底" : "平民", word: (i === spyIdx) ? pair[1] : pair[0] });
+            });
+        }
+    });
+
+    socket.on('bingo_click', (data) => {
+        const room = rooms[data.roomId];
+        if (!room || room.players[room.currentTurnIdx].id !== socket.id) return;
+        io.to(data.roomId).emit('bingo_sync', data.num);
+        room.currentTurnIdx = (room.currentTurnIdx + 1) % room.players.length;
+        io.to(data.roomId).emit('next_turn', { turnId: room.players[room.currentTurnIdx].id });
+    });
+
+    socket.on('cast_vote', (data) => {
+        const room = rooms[data.roomId];
+        if (!room) return;
+        room.votes[data.targetId] = (room.votes[data.targetId] || 0) + 1;
+        const aliveCount = room.players.filter(p => !p.isOut).length;
+        if (Object.values(room.votes).reduce((a, b) => a + b, 0) >= aliveCount) {
+            const outId = Object.keys(room.votes).reduce((a, b) => room.votes[a] > room.votes[b] ? a : b);
+            const player = room.players.find(p => p.id === outId);
+            if (player) player.isOut = true;
+            io.to(data.roomId).emit('vote_result', { outPlayer: player.name });
+            room.votes = {};
+        }
+    });
+
+    // 管理員關閉房間邏輯
     socket.on('admin_close_room', (data) => {
-        if (data.key === "admin123") {
-            const roomId = data.targetRoomId;
-            if (rooms[roomId]) {
-                // 通知房間內所有人房間已被關閉
-                io.to(roomId).emit('error_msg', '此房間已被管理員強制關閉');
-                io.to(roomId).emit('force_disconnect'); 
-                delete rooms[roomId]; // 關閉房間系統
-                console.log(`管理員關閉了房間: ${roomId}`);
-            }
+        if (data.key === ADMIN_KEY && rooms[data.targetRoomId]) {
+            io.to(data.targetRoomId).emit('force_disconnect', '房間已被管理員關閉');
+            delete rooms[data.targetRoomId];
+        }
+    });
+
+    socket.on('disconnect', () => {
+        if (socket.roomId && rooms[socket.roomId]) {
+            rooms[socket.roomId].players = rooms[socket.roomId].players.filter(p => p.id !== socket.id);
+            if (rooms[socket.roomId].players.length === 0) delete rooms[socket.roomId];
         }
     });
 });
-    <script src="bingo.js"></script>
-    <script src="spy.js"></script>
-</body>
-</html>
+
+server.listen(process.env.PORT || 3000, () => console.log("Server Live"));
