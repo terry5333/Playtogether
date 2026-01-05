@@ -7,18 +7,21 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { background: #020617; color: white; min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; }
+        body { background: #020617; color: white; min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; font-family: sans-serif; overflow: hidden; }
         .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); width: 92vw; max-width: 400px; padding: 2rem; border-radius: 2.5rem; border: 1px solid rgba(255,255,255,0.1); text-align: center; }
         .hidden { display: none !important; }
         canvas { background: white; border-radius: 1rem; touch-action: none; width: 100%; aspect-ratio: 1/1; }
-        #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 10px; opacity: 0; transition: 0.3s; z-index: 100; font-weight: bold; }
+        .bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+        .bingo-cell { aspect-ratio: 1/1; background: #334155; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; cursor: pointer; }
+        .marked { background: #3b82f6 !important; box-shadow: 0 0 10px #3b82f6; }
+        #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 12px; opacity: 0; transition: 0.3s; z-index: 999; font-weight: bold; pointer-events: none; }
     </style>
 </head>
 <body>
     <div id="toast"></div>
 
     <section id="view-login" class="glass space-y-4">
-        <h1 class="text-4xl font-black mb-6 italic">PARTY<span class="text-blue-500">BOX</span></h1>
+        <h1 class="text-4xl font-black italic mb-6">PARTY<span class="text-blue-500">BOX</span></h1>
         <input id="in-name" type="text" placeholder="你的暱稱" class="w-full bg-slate-800 p-4 rounded-2xl outline-none text-center">
         <button onclick="createRoom()" class="w-full bg-blue-600 p-4 rounded-2xl font-bold">創建房間</button>
         <div class="flex gap-2">
@@ -28,20 +31,21 @@
     </section>
 
     <section id="view-lobby" class="hidden glass space-y-6">
-        <h2 id="lab-room" class="text-4xl font-black text-blue-400 font-mono tracking-tighter">----</h2>
+        <h2 id="lab-room" class="text-5xl font-black text-blue-400 font-mono tracking-tighter">----</h2>
         <div id="player-list" class="flex flex-wrap gap-2 justify-center"></div>
         <div id="host-zone" class="hidden space-y-2 pt-4 border-t border-white/10">
-            <button onclick="startGame('draw')" class="w-full bg-orange-600 p-3 rounded-xl font-bold italic">啟動 你話我猜</button>
-            <button onclick="startGame('spy')" class="w-full bg-green-600 p-3 rounded-xl font-bold italic">啟動 誰是臥底</button>
+            <button onclick="startGame('draw')" class="w-full bg-orange-600 p-3 rounded-xl font-bold">啟動 你話我猜</button>
+            <button onclick="startGame('spy')" class="w-full bg-green-600 p-3 rounded-xl font-bold">啟動 誰是臥底</button>
+            <button onclick="startGame('bingo')" class="w-full bg-purple-600 p-3 rounded-xl font-bold">啟動 數字賓果</button>
         </div>
     </section>
 
     <section id="view-draw" class="hidden glass space-y-4">
-        <div id="draw-info" class="text-xs text-slate-400">正在準備遊戲...</div>
+        <div id="draw-info" class="text-sm font-bold text-orange-400">正在準備...</div>
         <canvas id="canvas" width="300" height="300"></canvas>
         <div id="draw-ctrl" class="hidden space-y-2">
-            <input id="draw-word" type="text" placeholder="要畫什麼？" class="w-full bg-slate-800 p-3 rounded-xl text-center">
-            <button onclick="submitWord()" class="w-full bg-blue-600 p-3 rounded-xl font-bold">確定出題</button>
+            <input id="draw-word" type="text" placeholder="輸入題目" class="w-full bg-slate-800 p-3 rounded-xl text-center">
+            <button onclick="submitWord()" class="w-full bg-blue-600 p-3 rounded-xl font-bold">確認出題</button>
         </div>
         <div id="guess-ctrl" class="space-y-2">
             <input id="guess-input" type="text" placeholder="猜猜看..." class="w-full bg-slate-800 p-3 rounded-xl text-center">
@@ -50,17 +54,29 @@
         <div id="score-board" class="text-[10px] text-slate-500 pt-2 border-t border-white/5"></div>
     </section>
 
+    <section id="view-spy" class="hidden glass space-y-6">
+        <h2 class="text-2xl font-bold text-green-400 italic">WHO IS THE SPY</h2>
+        <div class="bg-slate-800 p-8 rounded-3xl border-2 border-dashed border-slate-700">
+            <p class="text-slate-400 text-sm mb-4">你的題目：</p>
+            <h3 id="spy-word" class="text-5xl font-black text-white tracking-widest">---</h3>
+        </div>
+        <button onclick="v('view-lobby')" class="w-full bg-slate-700 p-3 rounded-xl text-xs">返回大廳</button>
+    </section>
+
+    <section id="view-bingo" class="hidden glass space-y-4">
+        <h2 class="text-2xl font-bold text-purple-400">BINGO</h2>
+        <div id="bingo-board" class="bingo-grid"></div>
+        <button onclick="v('view-lobby')" class="w-full bg-slate-700 p-3 rounded-xl text-xs">返回大廳</button>
+    </section>
+
     <script>
         const socket = io();
         let myRoom, myName, isDrawer = false;
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
 
-        function showToast(m, c="#ef4444") {
-            const t = document.getElementById('toast');
-            t.innerText = m; t.style.background = c; t.style.opacity = 1;
-            setTimeout(() => t.style.opacity = 0, 2000);
-        }
+        function v(id) { document.querySelectorAll('section').forEach(s => s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
+        function showToast(m, c="#ef4444") { const t = document.getElementById('toast'); t.innerText = m; t.style.background = c; t.style.opacity = 1; setTimeout(() => t.style.opacity = 0, 2000); }
         socket.on('toast', (m, c) => showToast(m, c));
 
         function createRoom() { myName = document.getElementById('in-name').value; if(myName) socket.emit('create_room'); }
@@ -70,7 +86,6 @@
             if(myName && myRoom) socket.emit('join_room', {roomId: myRoom, username: myName});
         }
         socket.on('room_created', d => { myRoom = d.roomId; socket.emit('join_room', {roomId: d.roomId, username: myName}); });
-        
         socket.on('room_update', d => {
             v('view-lobby');
             document.getElementById('lab-room').innerText = d.roomId;
@@ -84,37 +99,43 @@
             if(d.gameType === 'draw') {
                 v('view-draw');
                 isDrawer = (socket.id === d.drawerId);
-                document.getElementById('draw-info').innerText = `畫家：${d.drawerName}`;
+                document.getElementById('draw-info').innerText = isDrawer ? "你是畫家！請出題" : `畫家是：${d.drawerName}`;
                 document.getElementById('draw-ctrl').classList.toggle('hidden', !isDrawer);
                 document.getElementById('guess-ctrl').classList.toggle('hidden', isDrawer);
                 document.getElementById('score-board').innerHTML = d.scores.map(s => `${s.name}(${s.score})`).join(' | ');
                 ctx.clearRect(0, 0, 300, 300);
+            } else if(d.gameType === 'spy') {
+                v('view-spy');
+                document.getElementById('spy-word').innerText = d.word;
+            } else if(d.gameType === 'bingo') {
+                v('view-bingo');
+                const b = document.getElementById('bingo-board'); b.innerHTML = "";
+                let nums = Array.from({length:25}, (_,i)=>i+1).sort(()=>Math.random()-0.5);
+                nums.forEach(n => {
+                    let c = document.createElement('div'); c.className="bingo-cell"; c.innerText=n;
+                    c.onclick=()=>c.classList.toggle('marked'); b.appendChild(c);
+                });
             }
-            if(d.gameType === 'spy') showToast(`遊戲開始！題目已分配`, "#16a34a");
         });
 
+        // 畫板
         let drawing = false;
         canvas.onmousedown = (e) => { drawing = true; draw(e); };
         canvas.onmousemove = draw;
         window.onmouseup = () => { drawing = false; ctx.beginPath(); };
         canvas.ontouchstart = (e) => { drawing = true; draw(e.touches[0]); e.preventDefault(); };
         canvas.ontouchmove = (e) => { draw(e.touches[0]); e.preventDefault(); };
-
         function draw(e) {
             if(!drawing || !isDrawer) return;
             const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left; const y = e.clientY - rect.top;
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
             ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineTo(x, y); ctx.stroke();
             socket.emit('draw_stroke', {roomId: myRoom, x, y});
         }
-        socket.on('receive_stroke', d => {
-            ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineTo(d.x, d.y); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(d.x, d.y);
-        });
-
+        socket.on('receive_stroke', d => { ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineTo(d.x, d.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(d.x, d.y); });
         function submitWord() { socket.emit('draw_submit_word', {roomId: myRoom, word: document.getElementById('draw-word').value}); }
         function submitGuess() { socket.emit('draw_guess', {roomId: myRoom, guess: document.getElementById('guess-input').value}); }
-        function v(id) { document.querySelectorAll('section').forEach(s => s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
     </script>
 </body>
 </html>
