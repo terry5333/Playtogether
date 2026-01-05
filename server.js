@@ -10,7 +10,7 @@ const io = new Server(server, { cors: { origin: "*" }, transports: ['websocket']
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
-const WORDS = ["珍奶", "長頸鹿", "蜘蛛人", "口罩", "漢堡", "鋼琴", "仙人掌", "捷運", "珍珠", "咖啡"];
+const WORDS = ["珍珠奶茶", "長頸鹿", "蜘蛛人", "漢堡", "鋼琴", "仙人掌", "捷運", "台北101", "咖啡"];
 const SPY_PAIRS = [["蘋果", "水梨"], ["洗髮精", "沐浴乳"], ["西瓜", "香瓜"], ["原子筆", "鉛筆"]];
 
 io.on('connection', (socket) => {
@@ -23,9 +23,10 @@ io.on('connection', (socket) => {
     socket.on('join_room', (d) => {
         if (!rooms[d.roomId]) return socket.emit('toast', '房間不存在');
         socket.join(d.roomId);
-        socket.roomId = d.roomId; socket.username = d.username;
-        rooms[d.roomId].players.push({ id: socket.id, name: d.username, score: 0, isOut: false, isSpy: false, ready: false });
-        syncRoom(d.roomId);
+        socket.roomId = d.roomId;
+        socket.username = d.username;
+        rooms[d.roomId].players.push({ id: socket.id, name: d.username, score: 0, isOut: false, isSpy: false });
+        io.to(d.roomId).emit('room_update', { roomId: d.roomId, players: rooms[d.roomId].players, hostId: rooms[d.roomId].host });
     });
 
     socket.on('start_game', (d) => {
@@ -33,7 +34,7 @@ io.on('connection', (socket) => {
         room.gameType = d.gameType;
         room.totalRounds = parseInt(d.rounds) || 1;
         room.currentRound = 1; room.turnIdx = 0; room.bingoMarked = [];
-        room.players.forEach(p => { p.isOut = false; p.ready = false; });
+        room.players.forEach(p => { p.isOut = false; p.score = 0; });
 
         if (d.gameType === 'draw') sendDrawTurn(d.roomId);
         else if (d.gameType === 'bingo') {
@@ -49,14 +50,17 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 你話我猜換人邏輯
     function sendDrawTurn(rid) {
         const r = rooms[rid];
-        if (r.currentRound > r.totalRounds) return io.to(rid).emit('game_over', { winner: "遊戲結束", scores: r.players });
+        if (r.currentRound > r.totalRounds) {
+            const winner = r.players.sort((a,b) => b.score - a.score)[0];
+            return io.to(rid).emit('game_over', { winner: winner.name, reason: `最高分：${winner.score}分` });
+        }
         const drawer = r.players[r.turnIdx];
         io.to(rid).emit('game_begin', { gameType: 'draw', drawerId: drawer.id, drawerName: drawer.name, info: `第 ${r.currentRound}/${r.totalRounds} 輪`, suggest: WORDS[Math.floor(Math.random()*WORDS.length)] });
     }
 
+    socket.on('draw_submit_word', (d) => { if(rooms[d.roomId]) rooms[d.roomId].currentWord = d.word; });
     socket.on('draw_guess', (d) => {
         const r = rooms[d.roomId];
         if (d.guess === r.currentWord) {
@@ -77,7 +81,7 @@ io.on('connection', (socket) => {
             kickedP.isOut = true; r.votes = {};
             const spies = r.players.filter(p => !p.isOut && p.isSpy).length;
             const civs = r.players.filter(p => !p.isOut && !p.isSpy).length;
-            if (spies === 0) io.to(d.roomId).emit('game_over', { winner: "平民隊", reason: "臥底被抓到了！" });
+            if (spies === 0) io.to(d.roomId).emit('game_over', { winner: "平民隊", reason: "抓到臥底了！" });
             else if (civs <= spies) io.to(d.roomId).emit('game_over', { winner: "臥底隊", reason: "臥底成功生存！" });
             else io.to(d.roomId).emit('spy_vote_result', { name: kickedP.name, isSpy: kickedP.isSpy });
         }
@@ -89,10 +93,8 @@ io.on('connection', (socket) => {
         io.to(d.roomId).emit('bingo_start', { turnId: r.players[r.turnIdx].id, marked: r.bingoMarked });
     });
 
-    socket.on('bingo_win', (d) => io.to(d.roomId).emit('game_over', { winner: socket.username, reason: "率先達成連線！" }));
+    socket.on('bingo_win', (d) => io.to(d.roomId).emit('game_over', { winner: socket.username, reason: "先達成連線了！" }));
     socket.on('draw_stroke', (d) => socket.to(d.roomId).emit('receive_stroke', d));
     socket.on('clear_canvas', (rid) => io.to(rid).emit('canvas_clear_signal'));
-    socket.on('draw_submit_word', (d) => { if(rooms[d.roomId]) rooms[d.roomId].currentWord = d.word; });
-    function syncRoom(rid) { io.to(rid).emit('room_update', { roomId: rid, players: rooms[rid].players, hostId: rooms[rid].host }); }
 });
 server.listen(process.env.PORT || 3000, '0.0.0.0');
