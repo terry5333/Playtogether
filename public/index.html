@@ -1,24 +1,138 @@
-<div id="ui-bingo" class="hidden">
-    <div class="bg-blue-600 text-white p-4 rounded-t-3xl text-center">
-        <p id="bingo-info" class="text-xs font-bold uppercase">請依序填入 1-25 號</p>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Party Box</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .bingo-cell { aspect-ratio: 1/1; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .hidden { display: none !important; }
+        canvas { touch-action: none; border: 2px solid #333; background: #fff; width: 100%; max-width: 400px; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="lobby" class="flex flex-col items-center pt-20 space-y-4">
+        <h1 class="text-4xl font-bold">PARTY BOX</h1>
+        <input type="text" id="username" placeholder="你的名字" class="p-2 border rounded w-64">
+        <input type="text" id="roomId" placeholder="房號" class="p-2 border rounded w-64">
+        <button onclick="join()" class="bg-blue-500 text-white px-10 py-2 rounded font-bold">進入房間</button>
     </div>
-    <div id="bingo-grid" class="grid grid-cols-5 gap-1 bg-white p-2 rounded-b-3xl shadow-xl"></div>
-</div>
 
-<div id="ui-draw" class="hidden">
-    <div class="bg-white p-2 rounded-3xl shadow-xl overflow-hidden">
-        <canvas id="canvas" class="w-full bg-slate-50 rounded-2xl touch-none" style="aspect-ratio: 1/1;"></canvas>
-    </div>
-    <div id="draw-tools" class="flex justify-between mt-2">
-        <p id="word-display" class="font-black text-blue-500"></p>
-        <button onclick="clearCanvas()" class="text-xs bg-slate-200 px-3 py-1 rounded-full">清除重畫</button>
-    </div>
-</div>
+    <div id="game-area" class="hidden p-4 flex flex-col items-center">
+        <div id="host-panel" class="hidden bg-white p-4 rounded shadow mb-4 w-full max-w-sm">
+            <h2 class="font-bold border-b mb-2 text-center">房長控制台</h2>
+            <select id="gameSelect" class="w-full p-2 mb-2 border">
+                <option value="bingo">賓果</option>
+                <option value="draw">你畫我猜</option>
+                <option value="spy">誰是臥底</option>
+            </select>
+            <button onclick="startGame()" class="w-full bg-orange-500 text-white py-2 rounded">開始遊戲</button>
+        </div>
 
-<div id="ui-spy" class="hidden space-y-4">
-    <div id="spy-timer" class="text-center text-2xl font-black text-red-500">60s</div>
-    <div id="spy-card" onclick="revealSpy()" class="h-64 bg-white rounded-[3rem] shadow-2xl flex items-center justify-center border-b-8 border-blue-500 transition-transform active:scale-95">
-        <span id="spy-word" class="text-3xl font-black text-slate-700">點擊看詞</span>
+        <h2 id="status" class="text-xl mb-4 font-bold text-blue-600">等待開局...</h2>
+
+        <div id="ui-bingo" class="hidden w-full max-w-sm">
+            <p class="text-center text-sm mb-2">請依序填入 1-25 號</p>
+            <div id="bingo-grid" class="grid grid-cols-5 gap-1 bg-white p-1"></div>
+        </div>
+
+        <div id="ui-draw" class="hidden w-full max-w-md flex flex-col items-center space-y-2">
+            <p id="draw-word" class="text-lg font-bold text-red-500">準備猜題...</p>
+            <canvas id="canvas" width="400" height="400"></canvas>
+            <button id="clear-draw" onclick="clearCanvas()" class="hidden bg-gray-500 text-white px-4 py-1 rounded text-sm">清除畫布</button>
+            
+            <div id="guess-bar" class="flex w-full mt-2">
+                <input type="text" id="guess-input" placeholder="輸入答案..." class="flex-1 p-2 border rounded-l">
+                <button onclick="sendGuess()" class="bg-blue-600 text-white px-4 rounded-r">猜！</button>
+            </div>
+            <div id="chat-box" class="w-full h-24 overflow-y-auto bg-gray-200 p-2 mt-2 text-sm rounded"></div>
+        </div>
     </div>
-    <div id="vote-panel" class="hidden grid grid-cols-2 gap-2"></div>
-</div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let myUsername, myRoom, isHost = false, isTurn = false;
+
+        function join() {
+            myUsername = document.getElementById('username').value;
+            myRoom = document.getElementById('roomId').value;
+            if(!myUsername || !myRoom) return alert("請填寫名字與房號");
+            socket.emit('join_room', { roomId: myRoom, username: myUsername });
+            document.getElementById('lobby').classList.add('hidden');
+            document.getElementById('game-area').classList.remove('hidden');
+        }
+
+        socket.on('room_update', (room) => {
+            isHost = (socket.id === room.host);
+            if(isHost && !room.gameStarted) document.getElementById('host-panel').classList.remove('hidden');
+        });
+
+        function startGame() {
+            const gameType = document.getElementById('gameSelect').value;
+            socket.emit('start_game', { roomId: myRoom, gameType });
+            document.getElementById('host-panel').classList.add('hidden');
+        }
+
+        socket.on('game_begin', (data) => {
+            document.getElementById('ui-bingo').classList.toggle('hidden', data.gameType !== 'bingo');
+            document.getElementById('ui-draw').classList.toggle('hidden', data.gameType !== 'draw');
+            
+            if(data.gameType === 'draw') {
+                isTurn = (socket.id === data.turnId);
+                document.getElementById('status').innerText = isTurn ? "🎨 你是畫家" : "🧐 正在猜題";
+                document.getElementById('guess-bar').classList.toggle('hidden', isTurn);
+                document.getElementById('clear-draw').classList.toggle('hidden', !isTurn);
+                initCanvas();
+            }
+        });
+
+        socket.on('your_word', (data) => {
+            document.getElementById('draw-word').innerText = "題目：" + data.word;
+        });
+
+        // 你畫我猜：猜題
+        function sendGuess() {
+            const val = document.getElementById('guess-input').value;
+            if(!val) return;
+            socket.emit('submit_guess', { roomId: myRoom, username: myUsername, guess: val });
+            document.getElementById('guess-input').value = "";
+        }
+
+        socket.on('chat_msg', (data) => {
+            const box = document.getElementById('chat-box');
+            box.innerHTML += `<div><b>${data.user}:</b> ${data.text}</div>`;
+            box.scrollTop = box.scrollHeight;
+        });
+
+        socket.on('draw_success', (data) => {
+            alert(`🎉 ${data.winner} 猜對了！答案是 [${data.word}]`);
+        });
+
+        // 畫布邏輯
+        let ctx, drawing = false;
+        function initCanvas() {
+            const canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            canvas.onmousedown = (e) => { if(!isTurn) return; drawing=true; ctx.beginPath(); };
+            canvas.onmousemove = (e) => {
+                if(!drawing || !isTurn) return;
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                ctx.lineTo(x, y); ctx.stroke();
+                socket.emit('drawing', { roomId: myRoom, x, y, type: 'line' });
+            };
+            canvas.onmouseup = () => { drawing=false; socket.emit('drawing', { roomId: myRoom, type: 'end' }); };
+        }
+        socket.on('drawing', (data) => {
+            if(!ctx) return;
+            if(data.type === 'line') { ctx.lineTo(data.x, data.y); ctx.stroke(); }
+            else ctx.beginPath();
+        });
+        function clearCanvas() { ctx.clearRect(0,0,400,400); socket.emit('drawing', { roomId: myRoom, type: 'clear' }); }
+        socket.on('drawing', (data) => { if(data.type === 'clear') ctx.clearRect(0,0,400,400); });
+    </script>
+</body>
+</html>
