@@ -2,80 +2,56 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>Party Box - 管理員後台</title>
+    <title>上帝視角 - PartyBox Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
 </head>
-<body class="bg-slate-900 text-slate-100 p-6 min-h-screen">
+<body class="bg-slate-950 text-white p-8">
+    <div id="login-zone" class="max-w-md mx-auto bg-slate-900 p-8 rounded-3xl border border-slate-800">
+        <h1 class="text-2xl font-bold mb-4">管理員登入</h1>
+        <input id="key" type="password" class="w-full bg-slate-800 p-4 rounded-xl outline-none mb-4">
+        <button onclick="io().emit('admin_login', document.getElementById('key').value)" class="w-full bg-blue-600 p-4 rounded-xl">驗證</button>
+    </div>
 
-    <div class="max-w-5xl mx-auto">
-        <header class="flex justify-between items-center mb-8 bg-slate-800 p-6 rounded-3xl shadow-2xl">
-            <div>
-                <h1 class="text-2xl font-black text-blue-400">系統監視器</h1>
-                <p class="text-xs text-slate-400 mt-1">即時監控所有遊戲房間狀態</p>
-            </div>
-            <div class="flex gap-4">
-                <input type="password" id="adminKey" placeholder="輸入管理密鑰" class="bg-slate-700 px-4 py-2 rounded-xl outline-none text-sm border border-slate-600 focus:border-blue-500">
-                <button onclick="fetchData()" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-xl font-bold text-sm transition">整理數據</button>
-            </div>
-        </header>
-
-        <div id="stats" class="grid grid-cols-3 gap-4 mb-8">
-            <div class="bg-slate-800 p-6 rounded-3xl border border-slate-700">
-                <p class="text-slate-400 text-xs font-bold uppercase">運行中房間</p>
-                <p id="totalRooms" class="text-3xl font-black mt-1">0</p>
-            </div>
-            </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="roomContainer">
-            </div>
+    <div id="admin-panel" class="hidden">
+        <h1 class="text-3xl font-black mb-8 text-blue-500">PartyBox 全知監控台</h1>
+        <div id="rooms-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
     </div>
 
     <script>
         const socket = io();
+        socket.on('admin_auth_success', () => {
+            document.getElementById('login-zone').classList.add('hidden');
+            document.getElementById('admin-panel').classList.remove('hidden');
+        });
 
-        async function fetchData() {
-            const key = document.getElementById('adminKey').value;
-            try {
-                const res = await fetch(`/admin/data?key=${key}`);
-                if (!res.ok) throw new Error("驗證失敗");
-                const data = await res.json();
-                renderRooms(data);
-            } catch (err) {
-                alert(err.message);
-            }
-        }
-
-        function renderRooms(rooms) {
-            document.getElementById('totalRooms').innerText = rooms.length;
-            const container = document.getElementById('roomContainer');
-            container.innerHTML = rooms.map(room => `
-                <div class="bg-slate-800 p-6 rounded-3xl border border-slate-700 hover:border-slate-500 transition">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <span class="px-2 py-1 bg-blue-900 text-blue-300 text-[10px] rounded-md font-bold uppercase">${room.gameType}</span>
-                            <h3 class="text-xl font-bold mt-2">房號：${room.roomId}</h3>
-                            <p class="text-sm text-slate-400">房長：${room.hostName}</p>
-                        </div>
-                        <button onclick="deleteRoom('${room.roomId}')" class="text-red-400 hover:text-red-300 text-xs font-bold bg-red-900/30 px-3 py-1 rounded-lg">強制解散</button>
+        socket.on('admin_monitor_update', rooms => {
+            const grid = document.getElementById('rooms-grid');
+            grid.innerHTML = rooms.map(room => `
+                <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold font-mono">#${room.id}</h2>
+                        <button onclick="closeRoom('${room.id}')" class="text-xs bg-red-600 px-2 py-1 rounded">解散</button>
                     </div>
-                    <div class="mt-4 pt-4 border-t border-slate-700">
-                        <p class="text-xs text-slate-500 mb-2">在線玩家 (${room.playerCount})</p>
-                        <div class="flex flex-wrap gap-2">
-                            ${room.players.map(p => `<span class="bg-slate-700 px-2 py-1 rounded text-[10px]">${p}</span>`).join('')}
-                        </div>
+                    <div class="text-xs text-slate-500 mb-4">模式：${room.gameType}</div>
+                    <div class="space-y-3">
+                        ${room.players.map(p => `
+                            <div class="bg-slate-800 p-3 rounded-xl flex gap-3 items-center">
+                                <div class="w-12 h-12 grid grid-cols-5 gap-0.5 bg-slate-700 p-0.5">
+                                    ${(p.bingoBoard.length > 0 ? p.bingoBoard : new Array(25).fill(0)).map(n => `<div class="bg-slate-900 text-[4px] flex items-center justify-center">${n||''}</div>`).join('')}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold ${p.isHost?'text-blue-400':''}">${p.name}</div>
+                                    <div class="text-[10px] text-slate-400">身份：${p.role} (${p.word})</div>
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
                 </div>
             `).join('');
-        }
+        });
 
-        function deleteRoom(roomId) {
-            const key = document.getElementById('adminKey').value;
-            if (confirm(`確定要解散房間 ${roomId} 嗎？`)) {
-                socket.emit('admin_command', { type: 'DELETE_ROOM', targetId: roomId, key });
-                setTimeout(fetchData, 500); // 延時刷新
-            }
-        }
+        function closeRoom(id) { socket.emit('admin_close_room', id); }
     </script>
 </body>
 </html>
