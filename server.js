@@ -13,7 +13,6 @@ let rooms = {};
 const ADMIN_KEY = "1010215";
 
 io.on('connection', (socket) => {
-    // --- 房務系統 ---
     socket.on('create_room', () => {
         const roomId = Math.floor(1000 + Math.random() * 9000).toString();
         rooms[roomId] = { host: socket.id, players: [], gameType: "大廳", currentWord: "", turnIdx: 0 };
@@ -32,7 +31,6 @@ io.on('connection', (socket) => {
         syncData(roomId);
     });
 
-    // --- 遊戲啟動控制 ---
     socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
         if (!room || room.host !== socket.id) return;
@@ -51,10 +49,9 @@ io.on('connection', (socket) => {
         } else {
             io.to(data.roomId).emit('game_begin', { gameType: data.gameType });
         }
-        syncData(data.roomId);
+        sendAdminUpdate(); // 僅通知管理員遊戲開始，不觸發玩家 room_update 以免閃退
     });
 
-    // --- 你話我猜 邏輯 ---
     function sendDrawTurn(roomId) {
         const room = rooms[roomId];
         const drawer = room.players[room.turnIdx];
@@ -67,35 +64,33 @@ io.on('connection', (socket) => {
 
     socket.on('draw_submit_word', (data) => {
         if(rooms[data.roomId]) rooms[data.roomId].currentWord = data.word;
-        io.to(data.roomId).emit('toast', '畫家已出題，開始猜題！', '#3b82f6');
+        io.to(data.roomId).emit('toast', '畫家已出題！', '#3b82f6');
         sendAdminUpdate();
     });
 
     socket.on('draw_guess', (data) => {
         const room = rooms[data.roomId];
-        if (data.guess === room.currentWord && room.currentWord !== "") {
+        if (!room || room.currentWord === "") return;
+        if (data.guess.trim() === room.currentWord.trim()) {
             const winner = room.players.find(p => p.id === socket.id);
             const drawer = room.players[room.turnIdx];
             if (winner) winner.score += 10;
             if (drawer) drawer.score += 5;
-            io.to(data.roomId).emit('toast', `${socket.username} 猜對了！+10分`, '#16a34a');
+            io.to(data.roomId).emit('toast', `${socket.username} 答對了！`, '#16a34a');
             room.turnIdx = (room.turnIdx + 1) % room.players.length;
             setTimeout(() => sendDrawTurn(data.roomId), 2000);
-            syncData(data.roomId);
+            sendAdminUpdate();
         }
     });
 
     socket.on('draw_stroke', (d) => socket.to(d.roomId).emit('receive_stroke', d));
 
-    // --- 管理員系統 ---
     socket.on('admin_login', (key) => {
         if (key === ADMIN_KEY) {
             socket.join('admin_group');
             socket.emit('admin_auth_success');
             sendAdminUpdate();
-        } else {
-            socket.emit('toast', '密鑰錯誤！');
-        }
+        } else { socket.emit('toast', '密鑰錯誤！'); }
     });
 
     function syncData(rid) {
@@ -105,12 +100,10 @@ io.on('connection', (socket) => {
     }
 
     function sendAdminUpdate() {
-        const allRooms = Object.keys(rooms).map(id => ({
-            id, gameType: rooms[id].gameType, currentWord: rooms[id].currentWord,
-            players: rooms[id].players
+        const all = Object.keys(rooms).map(id => ({
+            id, gameType: rooms[id].gameType, currentWord: rooms[id].currentWord, players: rooms[id].players
         }));
-        io.to('admin_group').emit('admin_monitor_update', allRooms);
+        io.to('admin_group').emit('admin_monitor_update', all);
     }
 });
-
-server.listen(3000, () => console.log('Server is running on port 3000'));
+server.listen(3000);
