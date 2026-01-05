@@ -10,15 +10,33 @@ const io = new Server(server, { cors: { origin: "*" } });
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
+let gameHistory = []; // 存放歷史戰績
 
+// 廣播給 Admin 的統一函數
 function broadcastAdminData() {
-    const data = Object.keys(rooms).map(rid => ({
-        id: rid,
-        game: rooms[rid].gameType || 'Lobby',
-        players: rooms[rid].players.map(p => ({ id: p.id, name: p.name })),
-        host: rooms[rid].players.find(p => p.id === rooms[rid].host)?.name || '未知'
-    }));
+    const data = {
+        rooms: Object.keys(rooms).map(rid => ({
+            id: rid,
+            game: rooms[rid].gameType || 'Lobby',
+            players: rooms[rid].players.map(p => ({ id: p.id, name: p.name })),
+            host: rooms[rid].players.find(p => p.id === rooms[rid].host)?.name || '未知'
+        })),
+        history: gameHistory
+    };
     io.emit('admin_data_update', data);
+}
+
+// 記錄戰績
+function recordResult(roomId, gameType, winner, detail) {
+    gameHistory.unshift({
+        time: new Date().toLocaleTimeString(),
+        roomId: roomId,
+        gameType: gameType,
+        winner: winner,
+        detail: detail
+    });
+    if(gameHistory.length > 50) gameHistory.pop(); 
+    broadcastAdminData();
 }
 
 io.on('connection', (socket) => {
@@ -36,32 +54,42 @@ io.on('connection', (socket) => {
         if (!r) return socket.emit('toast', '❌ 房間不存在');
         socket.join(d.roomId);
         socket.roomId = d.roomId;
+        socket.userName = d.username;
         r.players.push({ id: socket.id, name: d.username });
         io.to(d.roomId).emit('room_update', { roomId: d.roomId, players: r.players, hostId: r.host });
         broadcastAdminData();
     });
 
-    // 遊戲初始化
     socket.on('host_setup_game', (d) => {
         const r = rooms[socket.roomId];
         if (!r || socket.id !== r.host) return;
+        r.gameType = d.type === 'draw' ? 'Drawing' : (d.type === 'spy' ? 'Spy Game' : 'Bingo');
         if (d.type === 'draw') {
-            r.gameType = 'Drawing'; r.turnIdx = 0;
+            r.turnIdx = 0;
             io.to(r.players[0].id).emit('draw_set_word_request');
-        } else if (d.type === 'spy') {
-            r.gameType = 'Spy Game'; io.to(r.host).emit('spy_ask_config');
-        } else if (d.type === 'bingo') {
-            r.gameType = 'Bingo'; io.to(r.host).emit('bingo_ask_config');
+        } else {
+            io.to(r.host).emit(`${d.type}_ask_config`);
         }
         broadcastAdminData();
     });
 
-    // 各遊戲細節邏輯
+    // --- 你話我猜 ---
     socket.on('draw_submit_word', (d) => {
         const r = rooms[socket.roomId];
+        r.currentWord = d.word;
         io.to(socket.roomId).emit('game_begin', { type: 'draw', drawerId: socket.id, drawerName: d.name, word: d.word });
     });
 
+    socket.on('draw_guess', (d) => {
+        const r = rooms[socket.roomId];
+        if(r && d.guess === r.currentWord) {
+            recordResult(socket.roomId, "你話我猜", d.username, `題目: ${r.currentWord}`);
+            io.to(socket.roomId).emit('toast', `🎉 ${d.username} 答對了！`);
+            r.gameType = 'Lobby'; 
+        }
+    });
+
+    // --- 誰是臥底 ---
     socket.on('spy_start_with_config', (d) => {
         const r = rooms[socket.roomId];
         const spyIdx = Math.floor(Math.random() * r.players.length);
@@ -73,6 +101,7 @@ io.on('connection', (socket) => {
         }, 1000);
     });
 
+    // --- Bingo ---
     socket.on('bingo_start_with_config', (d) => {
         const r = rooms[socket.roomId];
         r.bingoReadyCount = 0; r.bingoMarked = []; r.turnIdx = 0;
@@ -96,7 +125,12 @@ io.on('connection', (socket) => {
     });
 
     socket.on('bingo_win', (d) => {
-        io.to(socket.roomId).emit('bingo_game_over', { winner: d.name });
+        const r = rooms[socket.roomId];
+        if(r && r.gameType === 'Bingo') {
+            recordResult(socket.roomId, "數字賓果", d.name, "達成連線目標");
+            io.to(socket.roomId).emit('bingo_game_over', { winner: d.name });
+            r.gameType = 'Lobby';
+        }
     });
 
     socket.on('draw_stroke', (d) => socket.to(socket.roomId).emit('receive_stroke', d));
@@ -104,6 +138,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         if (socket.roomId && rooms[socket.roomId]) {
             rooms[socket.roomId].players = rooms[socket.roomId].players.filter(p => p.id !== socket.id);
+            if (rooms[socket.roomId].players.length === 0) delete rooms[socket.roomId];
             broadcastAdminData();
         }
     });
