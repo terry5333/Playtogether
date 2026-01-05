@@ -2,42 +2,37 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>Admin上帝模式</title>
+    <title>PartyBox Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
 </head>
-<body class="bg-black text-white p-8">
-    <div id="auth" class="max-w-xs mx-auto text-center space-y-4">
-        <h2 class="text-xl font-bold">管理員登入 (Key: 1010215)</h2>
-        <input type="password" id="key" class="w-full bg-slate-900 p-3 rounded border border-slate-700">
+<body class="bg-black text-white p-6">
+    <div id="auth" class="max-w-xs mx-auto text-center space-y-4 pt-20">
+        <h2 class="text-xl font-bold">上帝模式</h2>
+        <input type="password" id="key" class="w-full bg-slate-900 p-3 rounded" placeholder="輸入密鑰">
         <button onclick="socket.emit('admin_login', document.getElementById('key').value)" class="bg-blue-600 w-full p-3 rounded">登入</button>
     </div>
-
     <div id="main" class="hidden">
-        <h1 class="text-2xl font-bold mb-6">實時房間監控</h1>
-        <div id="rooms" class="grid gap-4"></div>
+        <h1 class="text-2xl font-bold mb-6">全房間監控</h1>
+        <div id="rooms" class="grid gap-6"></div>
     </div>
-
     <script>
         const socket = io();
-        socket.on('admin_auth_success', () => { document.getElementById('auth').hidden=true; document.getElementById('main').classList.remove('hidden'); });
+        socket.on('admin_auth_success', () => { document.getElementById('auth').classList.add('hidden'); document.getElementById('main').classList.remove('hidden'); });
         socket.on('admin_monitor_update', (rooms) => {
             document.getElementById('rooms').innerHTML = rooms.map(r => `
                 <div class="bg-slate-900 p-4 rounded-xl border border-slate-700">
-                    <div class="flex justify-between items-center mb-2">
+                    <div class="flex justify-between items-center">
                         <b class="text-blue-400">房號: #${r.id} (${r.gameType})</b>
                         <button onclick="socket.emit('admin_close_room', '${r.id}')" class="text-xs bg-red-900 px-2 py-1 rounded">解散房間</button>
                     </div>
-                    <div class="space-y-1">
-                        ${r.players.map(p => `
-                            <div class="flex justify-between text-xs bg-slate-800 p-1 px-2 rounded">
-                                <span>${p.name} (分:${p.score}) - [${p.word || '無'}]</span>
-                                <button onclick="socket.emit('admin_kick', {roomId:'${r.id}', playerId:'${p.id}'})" class="text-red-500 hover:underline">踢出</button>
-                            </div>
-                        `).join('')}
+                    <div class="mt-4 space-y-2">
+                        ${r.players.map(p => `<div class="flex justify-between text-xs bg-slate-800 p-2 rounded">
+                            <span>${p.name} (分:${p.score})</span>
+                            <button onclick="socket.emit('admin_kick', {roomId:'${r.id}', playerId:'${p.id}'})" class="text-red-500">踢人</button>
+                        </div>`).join('')}
                     </div>
-                </div>
-            `).join('');
+                </div>`).join('');
         });
     </script>
 </body>
