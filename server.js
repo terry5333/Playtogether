@@ -13,7 +13,7 @@ let rooms = {};
 const ADMIN_KEY = "1010215";
 
 io.on('connection', (socket) => {
-    // 基礎邏輯
+    // --- 房務系統 ---
     socket.on('create_room', () => {
         const roomId = Math.floor(1000 + Math.random() * 9000).toString();
         rooms[roomId] = { host: socket.id, players: [], gameType: "大廳", currentWord: "", turnIdx: 0 };
@@ -27,12 +27,12 @@ io.on('connection', (socket) => {
         socket.roomId = roomId;
         socket.username = username;
         if (!rooms[roomId].players.find(p => p.id === socket.id)) {
-            rooms[roomId].players.push({ id: socket.id, name: username, score: 0, bingoBoard: [], word: "", role: "" });
+            rooms[roomId].players.push({ id: socket.id, name: username, score: 0, role: "", word: "" });
         }
         syncData(roomId);
     });
 
-    // 啟動遊戲
+    // --- 遊戲啟動控制 ---
     socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
         if (!room || room.host !== socket.id) return;
@@ -41,7 +41,7 @@ io.on('connection', (socket) => {
         if (data.gameType === 'draw') {
             sendDrawTurn(data.roomId);
         } else if (data.gameType === 'spy') {
-            const pair = [["原子筆", "鉛筆"], ["西瓜", "香瓜"]][Math.floor(Math.random()*2)];
+            const pair = [["原子筆", "鉛筆"], ["西瓜", "香瓜"], ["烤肉", "火鍋"]][Math.floor(Math.random()*3)];
             const spyIdx = Math.floor(Math.random() * room.players.length);
             room.players.forEach((p, idx) => {
                 p.role = (idx === spyIdx ? "臥底" : "平民");
@@ -54,11 +54,11 @@ io.on('connection', (socket) => {
         syncData(data.roomId);
     });
 
-    // 你話我猜邏輯
+    // --- 你話我猜 邏輯 ---
     function sendDrawTurn(roomId) {
         const room = rooms[roomId];
         const drawer = room.players[room.turnIdx];
-        room.currentWord = "";
+        room.currentWord = ""; 
         io.to(roomId).emit('game_begin', { 
             gameType: 'draw', drawerId: drawer.id, drawerName: drawer.name,
             scores: room.players.map(p => ({name: p.name, score: p.score})) 
@@ -66,9 +66,9 @@ io.on('connection', (socket) => {
     }
 
     socket.on('draw_submit_word', (data) => {
-        rooms[data.roomId].currentWord = data.word;
-        io.to(data.roomId).emit('toast', '畫家已出題，大家快猜！', "#3b82f6");
-        syncData(data.roomId);
+        if(rooms[data.roomId]) rooms[data.roomId].currentWord = data.word;
+        io.to(data.roomId).emit('toast', '畫家已出題，開始猜題！', '#3b82f6');
+        sendAdminUpdate();
     });
 
     socket.on('draw_guess', (data) => {
@@ -78,7 +78,7 @@ io.on('connection', (socket) => {
             const drawer = room.players[room.turnIdx];
             if (winner) winner.score += 10;
             if (drawer) drawer.score += 5;
-            io.to(data.roomId).emit('toast', `${socket.username} 猜對了！+10分`, "#16a34a");
+            io.to(data.roomId).emit('toast', `${socket.username} 猜對了！+10分`, '#16a34a');
             room.turnIdx = (room.turnIdx + 1) % room.players.length;
             setTimeout(() => sendDrawTurn(data.roomId), 2000);
             syncData(data.roomId);
@@ -87,27 +87,30 @@ io.on('connection', (socket) => {
 
     socket.on('draw_stroke', (d) => socket.to(d.roomId).emit('receive_stroke', d));
 
-    // 管理員驗證
+    // --- 管理員系統 ---
     socket.on('admin_login', (key) => {
         if (key === ADMIN_KEY) {
             socket.join('admin_group');
             socket.emit('admin_auth_success');
             sendAdminUpdate();
+        } else {
+            socket.emit('toast', '密鑰錯誤！');
         }
     });
 
     function syncData(rid) {
+        if(!rooms[rid]) return;
         io.to(rid).emit('room_update', { roomId: rid, players: rooms[rid].players, hostId: rooms[rid].host });
         sendAdminUpdate();
     }
 
     function sendAdminUpdate() {
-        const data = Object.keys(rooms).map(id => ({
+        const allRooms = Object.keys(rooms).map(id => ({
             id, gameType: rooms[id].gameType, currentWord: rooms[id].currentWord,
             players: rooms[id].players
         }));
-        io.to('admin_group').emit('admin_monitor_update', data);
+        io.to('admin_group').emit('admin_monitor_update', allRooms);
     }
 });
 
-server.listen(3000);
+server.listen(3000, () => console.log('Server is running on port 3000'));
