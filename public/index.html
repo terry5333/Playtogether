@@ -3,77 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Let's play!</title>
+    <title>PartyBox Healing</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         :root { --sand: #F2EBE1; --blue: #A2C2D8; --mint: #B2D8D8; --gray: #5D6D7E; }
-        body { background: var(--sand); color: var(--gray); font-family: sans-serif; }
+        body { background: var(--sand); color: var(--gray); font-family: sans-serif; overflow-x: hidden; }
         .card { background: white; border-radius: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
-        .btn-blue { background: var(--blue); color: white; border-radius: 1rem; }
+        .btn-blue { background: var(--blue); color: white; border-radius: 1rem; transition: 0.2s; }
         .btn-mint { background: var(--mint); color: #4A6A6A; font-weight: bold; border-radius: 1rem; }
-        .host-star { color: #F1C40F; text-shadow: 0 0 5px rgba(241,196,15,0.3); }
-        .bingo-cell { background: #fdfdfd; border: 1px solid #eee; border-radius: 10px; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .marked { background: var(--mint) !important; color: white; transform: scale(0.9); }
+        .btn-blue:active, .btn-mint:active { transform: scale(0.95); }
+        .host-star { color: #F1C40F; margin-right: 4px; }
+        .bingo-cell { background: #fdfdfd; border: 1px solid #eee; border-radius: 10px; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; }
+        .marked { background: var(--mint) !important; color: white; transform: scale(0.9); transition: 0.3s; }
         .hidden { display: none !important; }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
+    <div id="toast" class="fixed top-10 bg-black/70 text-white px-6 py-2 rounded-full opacity-0 transition-opacity pointer-events-none z-[100]"></div>
+
     <section id="view-lobby" class="card p-8 w-full max-w-sm space-y-6 text-center">
         <h1 class="text-3xl font-black" style="color: var(--blue)">PARTYBOX</h1>
         
         <div id="login-area" class="space-y-3">
-            <input id="in-name" type="text" placeholder="你的名字" class="w-full p-4 rounded-2xl bg-gray-50 text-center outline-none">
-            <button onclick="create()" class="w-full p-4 btn-blue font-bold">創建房間</button>
+            <input id="in-name" type="text" placeholder="你的名字" class="w-full p-4 rounded-2xl bg-gray-50 text-center outline-none border border-transparent focus:border-blue-200">
+            <button onclick="handleCreate()" class="w-full p-4 btn-blue font-bold shadow-lg shadow-blue-100">創建房間</button>
             <div class="flex gap-2">
-                <input id="in-room" type="number" placeholder="房號" class="w-2/3 p-4 rounded-2xl bg-gray-50 text-center">
-                <button onclick="join()" class="w-1/3 bg-gray-200 rounded-2xl font-bold">加入</button>
+                <input id="in-room" type="number" placeholder="房號" class="w-2/3 p-4 rounded-2xl bg-gray-50 text-center outline-none">
+                <button onclick="handleJoin()" class="w-1/3 bg-gray-200 rounded-2xl font-bold text-gray-500">加入</button>
             </div>
         </div>
 
         <div id="room-info" class="hidden space-y-4">
-            <div class="py-2 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                <p class="text-[10px] font-bold text-gray-400">ROOM ID</p>
-                <h2 id="rid-text" class="text-3xl font-black">----</h2>
+            <div class="py-3 bg-gray-50 rounded-2xl border border-dashed border-gray-300">
+                <p class="text-[10px] font-bold text-gray-400 tracking-widest">ROOM ID</p>
+                <h2 id="rid-text" class="text-4xl font-black tracking-tighter">----</h2>
             </div>
-            <div id="player-list" class="text-left space-y-2"></div>
-            <div id="host-zone" class="hidden pt-4 border-t space-y-2">
-                <select id="set-goal" class="w-full p-3 bg-gray-50 rounded-xl border-none"><option value="3">3 條線勝</option><option value="5">5 條線勝</option></select>
-                <button onclick="start('bingo')" class="w-full p-4 btn-mint">開始 數字賓果</button>
+            
+            <div class="text-left space-y-2">
+                <p class="text-[10px] font-bold text-gray-400 ml-1">PLAYERS</p>
+                <div id="player-list" class="space-y-2"></div>
+            </div>
+
+            <div id="host-zone" class="hidden pt-4 border-t border-gray-100 space-y-2">
+                <select id="set-goal" class="w-full p-3 bg-gray-50 rounded-xl border-none text-sm font-bold">
+                    <option value="3">3 條線勝利</option>
+                    <option value="5">5 條線勝利</option>
+                </select>
+                <button onclick="handleStart('bingo')" class="w-full p-4 btn-mint shadow-lg shadow-green-50">開始 數字賓果</button>
             </div>
         </div>
     </section>
 
     <section id="view-bingo" class="hidden card p-6 w-full max-w-sm space-y-4">
-        <div class="flex justify-between text-xs font-bold text-gray-400"><span id="target">目標：3 條線</span><span id="current">目前：0 條</span></div>
+        <div class="flex justify-between text-xs font-bold text-gray-400">
+            <span id="target">目標：3 條線</span>
+            <span id="current">目前：0 條</span>
+        </div>
         <div id="board" class="grid grid-cols-5 gap-2"></div>
+        <p class="text-[10px] text-center text-gray-300">點擊數字進行連線</p>
     </section>
 
     <script>
         const socket = io();
-        let myRid, bingoArr = [], goal = 3;
+        let myRid, myUserName, bingoArr = [], goal = 3;
 
-        function create() { let n = document.getElementById('in-name').value; if(n) { socket.emit('create_room'); socket.name = n; } }
-        function join() { let n = document.getElementById('in-name').value; let r = document.getElementById('in-room').value; if(n && r) { socket.emit('join_room', {roomId:r, username:n}); socket.name = n; } }
-        function start(type) { socket.emit('start_game', {gameType:type, roomId:myRid, goal:document.getElementById('set-goal').value}); }
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg; t.style.opacity = 1;
+            setTimeout(() => t.style.opacity = 0, 2000);
+        }
 
-        socket.on('room_created', d => { myRid = d.roomId; socket.emit('join_room', {roomId:d.roomId, username:socket.name}); });
-        
+        // 創建房間流程
+        function handleCreate() {
+            myUserName = document.getElementById('in-name').value;
+            if(!myUserName) return showToast("請輸入名字");
+            socket.emit('create_room');
+        }
+
+        // 加入房間流程
+        function handleJoin() {
+            myUserName = document.getElementById('in-name').value;
+            let rid = document.getElementById('in-room').value;
+            if(!myUserName || !rid) return showToast("名字或房號不能為空");
+            socket.emit('join_room', {roomId: rid, username: myUserName});
+        }
+
+        function handleStart(type) {
+            socket.emit('start_game', {gameType: type, roomId: myRid, goal: document.getElementById('set-goal').value});
+        }
+
+        socket.on('room_created', d => {
+            myRid = d.roomId;
+            socket.emit('join_room', {roomId: d.roomId, username: myUserName});
+        });
+
         socket.on('room_update', d => {
             document.getElementById('login-area').classList.add('hidden');
             document.getElementById('room-info').classList.remove('hidden');
-            document.getElementById('rid-text').innerText = d.roomId; myRid = d.roomId;
+            document.getElementById('rid-text').innerText = d.roomId;
+            myRid = d.roomId;
+            
+            // 房主控制面板
             document.getElementById('host-zone').classList.toggle('hidden', socket.id !== d.hostId);
             
+            // 更新名單 (含星星)
             document.getElementById('player-list').innerHTML = d.players.map(p => `
                 <div class="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
-                    <span class="font-bold text-sm">${p.id === d.hostId ? '<span class="host-star">★</span>' : ''} ${p.name}</span>
+                    <span class="font-bold text-sm">
+                        ${p.id === d.hostId ? '<span class="host-star">★</span>' : ''} ${p.name}
+                    </span>
+                    ${p.id === socket.id ? '<span class="text-[10px] text-blue-300 font-bold">YOU</span>' : ''}
                 </div>
             `).join('');
         });
 
+        // 遊戲邏輯 (Bingo)
         socket.on('game_begin', d => {
-            if(d.type === 'bingo') { 
+            if(d.type === 'bingo') {
                 document.getElementById('view-lobby').classList.add('hidden');
                 document.getElementById('view-bingo').classList.remove('hidden');
                 goal = d.goal; document.getElementById('target').innerText = `目標：${goal} 條線`;
@@ -86,7 +133,14 @@
             const b = document.getElementById('board'); b.innerHTML = "";
             for(let i=0; i<25; i++) {
                 let c = document.createElement('div'); c.className = "bingo-cell";
-                c.onclick = () => { if(!bingoArr[i] && n<=25) { c.innerText = n; bingoArr[i] = n; n++; } };
+                c.onclick = () => {
+                    if(!bingoArr[i] && n <= 25) {
+                        c.innerText = n; bingoArr[i] = n; n++;
+                        if(n > 25) socket.emit('bingo_pick', {roomId: myRid, num: bingoArr[0]}); // 自動觸發同步
+                    } else if(bingoArr[i]) {
+                        socket.emit('bingo_pick', {roomId: myRid, num: bingoArr[i]});
+                    }
+                };
                 b.appendChild(c);
             }
         }
@@ -103,9 +157,10 @@
             for(let i=0; i<5; i++) if([0,1,2,3,4].every(j => m[i+j*5])) lines++;
             if([0,6,12,18,24].every(i => m[i])) lines++; if([4,8,12,16,20].every(i => m[i])) lines++;
             document.getElementById('current').innerText = `目前：${lines} 條`;
-            if(lines >= goal) alert("遊戲結束！");
+            if(lines >= goal) { showToast("恭喜達成目標！"); }
         }
 
+        socket.on('toast', m => showToast(m));
         socket.on('kicked_signal', () => { alert("你已被踢出房間"); location.reload(); });
         socket.on('room_terminated', () => { alert("房間已被管理員解散"); location.reload(); });
     </script>
