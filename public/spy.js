@@ -1,40 +1,40 @@
 function startSpyGame() {
     let timeLeft = 60;
-    const timer = document.getElementById('spy-timer');
+    const timerEl = document.getElementById('spy-timer');
     const interval = setInterval(() => {
         timeLeft--;
-        timer.innerText = `討論倒計時：${timeLeft}s`;
+        timerEl.innerText = `💬 討論倒計時：${timeLeft}s`;
         if (timeLeft <= 0) {
             clearInterval(interval);
-            timer.innerText = "討論結束，請投票！";
-            showVoting();
+            timerEl.innerText = "🚨 請開始投票！";
+            showVotingUI();
         }
     }, 1000);
 }
 
 socket.on('spy_setup', (data) => {
-    document.getElementById('spy-area').innerHTML = `
-        <div class="p-6 bg-white rounded-lg shadow">
-            <p class="text-gray-500">你的身分：${data.role}</p>
-            <h2 class="text-3xl font-bold mt-2">${data.word}</h2>
-        </div>
+    document.getElementById('spy-card').innerHTML = `
+        <div class="text-xs font-black text-blue-500 uppercase tracking-widest mb-2">${data.role}</div>
+        <div class="text-4xl font-black text-slate-800">${data.word}</div>
     `;
 });
 
-function showVoting() {
-    let html = `<h3 class="font-bold mb-2">誰是臥底？投票：</h3>`;
+function showVotingUI() {
+    const area = document.getElementById('vote-area');
+    area.innerHTML = '';
     myPlayers.forEach(p => {
-        html += `<button onclick="vote('${p.id}')" class="m-1 bg-red-500 text-white px-3 py-1 rounded">${p.name}</button>`;
+        const btn = document.createElement('button');
+        btn.className = "bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold hover:bg-red-50 hover:border-red-200 transition";
+        btn.innerText = p.name;
+        btn.onclick = () => {
+            socket.emit('cast_vote', { roomId: curRoom, targetId: p.id });
+            area.innerHTML = '<div class="col-span-2 text-center text-slate-400">已投票，等待其他玩家...</div>';
+        };
+        area.appendChild(btn);
     });
-    document.getElementById('spy-area').innerHTML = html;
-}
-
-function vote(id) {
-    socket.emit('cast_vote', { roomId: curRoom, targetId: id });
-    document.getElementById('spy-area').innerHTML = "已投票，請等待結果...";
 }
 
 socket.on('vote_result', (data) => {
-    alert(`結果：${data.outPlayer} 被處決了！`);
-    location.reload(); // 結束後重置
+    alert(`📢 投票結果：${data.outPlayer} 被處決了！`);
+    location.reload();
 });
