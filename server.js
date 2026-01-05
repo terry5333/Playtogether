@@ -10,13 +10,38 @@ const io = new Server(server, { cors: { origin: "*" }, transports: ['websocket']
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
-const WORDS = ["珍珠奶茶", "長頸鹿", "蜘蛛人", "漢堡", "鋼琴", "仙人掌", "捷運", "台北101", "咖啡"];
-const SPY_PAIRS = [["蘋果", "水梨"], ["洗髮精", "沐浴乳"], ["西瓜", "香瓜"], ["原子筆", "鉛筆"]];
 
 io.on('connection', (socket) => {
+    // --- Admin 管理功能 ---
+    socket.on('admin_get_all_rooms', () => {
+        const roomData = Object.keys(rooms).map(rid => ({
+            id: rid,
+            gameType: rooms[rid].gameType || 'Lobby',
+            hostName: rooms[rid].players.find(p => p.id === rooms[rid].host)?.name || '未知',
+            playerCount: rooms[rid].players.length,
+            players: rooms[rid].players.map(p => ({ id: p.id, name: p.name }))
+        }));
+        socket.emit('admin_room_list', roomData);
+    });
+
+    socket.on('admin_kick_player', (data) => {
+        const room = rooms[data.roomId];
+        if (room) {
+            io.to(data.playerId).emit('kicked');
+            room.players = room.players.filter(p => p.id !== data.playerId);
+            io.to(data.roomId).emit('room_update', { roomId: data.roomId, players: room.players, hostId: room.host });
+        }
+    });
+
+    socket.on('admin_dissolve_room', (rid) => {
+        io.to(rid).emit('room_dissolved');
+        delete rooms[rid];
+    });
+
+    // --- 基礎房間功能 ---
     socket.on('create_room', () => {
         const roomId = Math.floor(1000 + Math.random() * 9000).toString();
-        rooms[roomId] = { host: socket.id, players: [], turnIdx: 0, currentRound: 1, totalRounds: 1, currentWord: "", bingoMarked: [] };
+        rooms[roomId] = { host: socket.id, players: [], bingoMarked: [], bingoGoal: 3, gameType: 'Lobby' };
         socket.emit('room_created', { roomId });
     });
 
@@ -24,77 +49,27 @@ io.on('connection', (socket) => {
         if (!rooms[d.roomId]) return socket.emit('toast', '房間不存在');
         socket.join(d.roomId);
         socket.roomId = d.roomId;
-        socket.username = d.username;
-        rooms[d.roomId].players.push({ id: socket.id, name: d.username, score: 0, isOut: false, isSpy: false });
+        rooms[d.roomId].players.push({ id: socket.id, name: d.username, score: 0 });
         io.to(d.roomId).emit('room_update', { roomId: d.roomId, players: rooms[d.roomId].players, hostId: rooms[d.roomId].host });
     });
 
     socket.on('start_game', (d) => {
-        const room = rooms[d.roomId]; if (!room) return;
+        const room = rooms[d.roomId];
+        if (!room) return;
         room.gameType = d.gameType;
-        room.totalRounds = parseInt(d.rounds) || 1;
-        room.currentRound = 1; room.turnIdx = 0; room.bingoMarked = [];
-        room.players.forEach(p => { p.isOut = false; p.score = 0; });
-
-        if (d.gameType === 'draw') sendDrawTurn(d.roomId);
-        else if (d.gameType === 'bingo') {
-            room.bingoGoal = d.goal;
-            io.to(d.roomId).emit('game_begin', { gameType: 'bingo_prepare', goal: room.bingoGoal });
-        } else if (d.gameType === 'spy') {
-            const pair = SPY_PAIRS[Math.floor(Math.random() * SPY_PAIRS.length)];
-            const spyIdx = Math.floor(Math.random() * room.players.length);
-            room.players.forEach((p, idx) => {
-                p.isSpy = (idx === spyIdx);
-                io.to(p.id).emit('game_begin', { gameType: 'spy', word: p.isSpy ? pair[1] : pair[0] });
-            });
-        }
+        room.bingoGoal = parseInt(d.goal) || 3;
+        room.bingoMarked = [];
+        io.to(d.roomId).emit('game_begin', { gameType: d.gameType, goal: room.bingoGoal });
     });
 
-    function sendDrawTurn(rid) {
-        const r = rooms[rid];
-        if (r.currentRound > r.totalRounds) {
-            const winner = r.players.sort((a,b) => b.score - a.score)[0];
-            return io.to(rid).emit('game_over', { winner: winner.name, reason: `最高分：${winner.score}分` });
-        }
-        const drawer = r.players[r.turnIdx];
-        io.to(rid).emit('game_begin', { gameType: 'draw', drawerId: drawer.id, drawerName: drawer.name, info: `第 ${r.currentRound}/${r.totalRounds} 輪`, suggest: WORDS[Math.floor(Math.random()*WORDS.length)] });
-    }
-
-    socket.on('draw_submit_word', (d) => { if(rooms[d.roomId]) rooms[d.roomId].currentWord = d.word; });
-    socket.on('draw_guess', (d) => {
-        const r = rooms[d.roomId];
-        if (d.guess === r.currentWord) {
-            r.players.find(p => p.id === socket.id).score += 2;
-            r.turnIdx++; if (r.turnIdx >= r.players.length) { r.turnIdx = 0; r.currentRound++; }
-            io.to(d.roomId).emit('toast', `答對了！答案是 [${r.currentWord}]`);
-            setTimeout(() => sendDrawTurn(d.roomId), 2000);
-        }
-    });
-
-    socket.on('spy_vote', (d) => {
-        const r = rooms[d.roomId]; r.votes = r.votes || {}; r.votes[socket.id] = d.targetId;
-        const activeP = r.players.filter(p => !p.isOut);
-        if (Object.keys(r.votes).length >= activeP.length) {
-            const counts = {}; Object.values(r.votes).forEach(id => counts[id] = (counts[id] || 0) + 1);
-            const kickedId = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
-            const kickedP = r.players.find(p => p.id === kickedId);
-            kickedP.isOut = true; r.votes = {};
-            const spies = r.players.filter(p => !p.isOut && p.isSpy).length;
-            const civs = r.players.filter(p => !p.isOut && !p.isSpy).length;
-            if (spies === 0) io.to(d.roomId).emit('game_over', { winner: "平民隊", reason: "抓到臥底了！" });
-            else if (civs <= spies) io.to(d.roomId).emit('game_over', { winner: "臥底隊", reason: "臥底成功生存！" });
-            else io.to(d.roomId).emit('spy_vote_result', { name: kickedP.name, isSpy: kickedP.isSpy });
-        }
-    });
-
+    // Bingo 同步與判定修復
     socket.on('bingo_pick', (d) => {
-        const r = rooms[d.roomId]; r.bingoMarked.push(parseInt(d.num));
-        r.turnIdx = (r.turnIdx + 1) % r.players.length;
-        io.to(d.roomId).emit('bingo_start', { turnId: r.players[r.turnIdx].id, marked: r.bingoMarked });
+        const r = rooms[d.roomId];
+        if (!r.bingoMarked.includes(parseInt(d.num))) {
+            r.bingoMarked.push(parseInt(d.num));
+            io.to(d.roomId).emit('bingo_sync', { marked: r.bingoMarked });
+        }
     });
-
-    socket.on('bingo_win', (d) => io.to(d.roomId).emit('game_over', { winner: socket.username, reason: "先達成連線了！" }));
-    socket.on('draw_stroke', (d) => socket.to(d.roomId).emit('receive_stroke', d));
-    socket.on('clear_canvas', (rid) => io.to(rid).emit('canvas_clear_signal'));
 });
-server.listen(process.env.PORT || 3000, '0.0.0.0');
+
+server.listen(process.env.PORT || 3000);
