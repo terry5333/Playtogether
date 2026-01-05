@@ -7,7 +7,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// 重要：這行解決 404，讓瀏覽器抓到 public 裡的 bingo.js
+// 解決 404 問題
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
@@ -24,13 +24,12 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('room_update', rooms[roomId]);
     });
 
-    // 處理誰是臥底身分分配
     socket.on('start_game', (data) => {
         const room = rooms[data.roomId];
         if (!room || room.host !== socket.id) return;
         room.gameStarted = true;
-        room.winLines = parseInt(data.winLines) || 3;
-
+        
+        // 誰是臥底邏輯
         if (room.gameType === 'spy') {
             const wordPairs = [["泡麵", "拉麵"], ["蘋果", "水梨"], ["鋼筆", "原子筆"]];
             const pair = wordPairs[Math.floor(Math.random() * wordPairs.length)];
@@ -42,12 +41,17 @@ io.on('connection', (socket) => {
                 });
             });
         }
-        io.to(data.roomId).emit('game_begin', { turnId: room.players[0].id, winLines: room.winLines });
+        io.to(data.roomId).emit('game_begin', { 
+            turnId: room.players[0].id, 
+            turnName: room.players[0].name,
+            winLines: data.winLines 
+        });
     });
 
-    // 🏆 關鍵修正：使用 socket.to 避免 502 當機
+    // 🏆 關鍵修正：解決 502 與 RangeError
     socket.on('drawing', (data) => {
         if (data.roomId) {
+            // 使用 socket.to 轉發給「除自己以外」的人，避免無限死循環
             socket.to(data.roomId).emit('render_drawing', data);
         }
     });
@@ -58,7 +62,10 @@ io.on('connection', (socket) => {
         if (room) {
             const idx = room.players.findIndex(p => p.id === socket.id);
             const nextIdx = (idx + 1) % room.players.length;
-            io.to(data.roomId).emit('next_turn', { turnId: room.players[nextIdx].id });
+            io.to(data.roomId).emit('next_turn', { 
+                turnId: room.players[nextIdx].id, 
+                turnName: room.players[nextIdx].name 
+            });
         }
     });
 
@@ -71,4 +78,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`Running on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Server is live on ${PORT}`));
