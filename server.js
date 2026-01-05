@@ -10,17 +10,12 @@ const io = new Server(server, { cors: { origin: "*" } });
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
-const DRAW_WORDS = ["珍珠奶茶", "長頸鹿", "台北101", "漢堡", "鋼琴", "恐龍", "臭豆腐", "雲霄飛車"];
-const SPY_PAIRS = [["蘋果", "水梨"], ["洗髮精", "沐浴乳"], ["原子筆", "鉛筆"], ["足球", "籃球"]];
 
 io.on('connection', (socket) => {
-    // --- 房間基礎 ---
+    // --- 基礎房間與加入 ---
     socket.on('create_room', () => {
         const rid = Math.floor(1000 + Math.random() * 9000).toString();
-        rooms[rid] = { 
-            host: socket.id, players: [], gameType: 'Lobby', 
-            turnIdx: 0, scores: {}, bingoMarked: [], timer: null 
-        };
+        rooms[rid] = { host: socket.id, players: [], gameType: 'Lobby', turnIdx: 0, scores: {}, timer: null };
         socket.emit('room_created', { roomId: rid });
     });
 
@@ -30,79 +25,88 @@ io.on('connection', (socket) => {
         socket.join(d.roomId);
         socket.roomId = d.roomId;
         r.players.push({ id: socket.id, name: d.username });
-        r.scores[socket.id] = 0; // 初始化分數
+        r.scores[socket.id] = 0;
         io.to(d.roomId).emit('room_update', { roomId: d.roomId, players: r.players, hostId: r.host });
     });
 
-    // --- 遊戲切換控制 ---
-    socket.on('start_game', (d) => {
-        const r = rooms[d.roomId]; if (!r) return;
-        r.gameType = d.gameType;
-        r.turnIdx = 0;
-
-        if (d.gameType === 'draw') {
-            startDrawTurn(d.roomId);
-        } else if (d.gameType === 'spy') {
-            startSpyGame(d.roomId);
-        } else if (d.gameType === 'bingo') {
-            r.bingoMarked = [];
-            io.to(d.roomId).emit('game_begin', { type: 'bingo' });
+    // --- 遊戲初始詢問 (由房主發起) ---
+    socket.on('host_setup_game', (d) => {
+        const r = rooms[d.roomId];
+        if (d.type === 'draw') {
+            // 房主選擇畫畫 -> 通知第一個畫家出題
+            r.gameType = 'draw';
+            r.turnIdx = 0;
+            const drawer = r.players[r.turnIdx];
+            io.to(drawer.id).emit('draw_set_word_request');
+            io.to(d.roomId).emit('toast', `🎨 等待 ${drawer.name} 出題中...`);
+        } else if (d.type === 'spy') {
+            // 房主選擇臥底 -> 詢問房主秒數 (前端處理)
+            r.gameType = 'spy';
+            io.to(r.host).emit('spy_ask_config');
+        } else if (d.type === 'bingo') {
+            // 房主選擇 Bingo -> 詢問幾條線 (前端處理)
+            r.gameType = 'bingo';
+            io.to(r.host).emit('bingo_ask_config');
         }
     });
 
-    // --- 1. 你話我猜：輪流與計分 ---
-    function startDrawTurn(rid) {
-        const r = rooms[rid];
-        if (r.turnIdx >= r.players.length) {
-            return io.to(rid).emit('game_over', { scores: r.scores, players: r.players });
-        }
-        const drawer = r.players[r.turnIdx];
-        r.currentWord = DRAW_WORDS[Math.floor(Math.random() * DRAW_WORDS.length)];
-        io.to(rid).emit('game_begin', { 
-            type: 'draw', drawerId: drawer.id, drawerName: drawer.name, 
-            word: r.currentWord, turn: r.turnIdx + 1, total: r.players.length 
-        });
-    }
-
-    socket.on('draw_guess', (d) => {
+    // --- 1. 你話我猜：自行出題邏輯 ---
+    socket.on('draw_submit_word', (d) => {
         const r = rooms[socket.roomId];
-        if (r && d.guess === r.currentWord) {
-            r.scores[socket.id] += 10; // 猜對者加分
-            r.scores[r.players[r.turnIdx].id] += 5; // 畫家也有辛苦分
-            io.to(socket.roomId).emit('toast', `🎉 ${d.username} 答對了！答案是 [${r.currentWord}]`);
-            r.turnIdx++;
-            setTimeout(() => startDrawTurn(socket.roomId), 2000);
-        }
+        r.currentWord = d.word;
+        io.to(socket.roomId).emit('game_begin', { 
+            type: 'draw', drawerId: socket.id, drawerName: d.name, turn: r.turnIdx + 1, total: r.players.length 
+        });
     });
 
-    // --- 2. 誰是臥底：計時投票 ---
-    function startSpyGame(rid) {
-        const r = rooms[rid];
+    // --- 2. 誰是臥底：計時邏輯 ---
+    socket.on('spy_start_with_config', (d) => {
+        const r = rooms[socket.roomId];
+        const SPY_PAIRS = [["蘋果", "水梨"], ["洗髮精", "沐浴乳"]];
         const pair = SPY_PAIRS[Math.floor(Math.random() * SPY_PAIRS.length)];
         const spyIdx = Math.floor(Math.random() * r.players.length);
-        r.players.forEach((p, i) => {
-            io.to(p.id).emit('game_begin', { type: 'spy', word: (i === spyIdx) ? pair[1] : pair[0] });
-        });
+        r.players.forEach((p, i) => io.to(p.id).emit('game_begin', { type: 'spy', word: (i === spyIdx) ? pair[1] : pair[0] }));
         
-        // 60秒後自動開啟投票介面
-        let timeLeft = 60;
+        let sec = parseInt(d.seconds);
         r.timer = setInterval(() => {
-            timeLeft--;
-            io.to(rid).emit('timer_update', timeLeft);
-            if (timeLeft <= 0) {
-                clearInterval(r.timer);
-                io.to(rid).emit('start_voting', { players: r.players });
-            }
+            sec--;
+            io.to(socket.roomId).emit('timer_update', sec);
+            if (sec <= 0) { clearInterval(r.timer); io.to(socket.roomId).emit('start_voting', { players: r.players }); }
         }, 1000);
+    });
+
+    // --- 3. Bingo：輪流叫號邏輯 ---
+    socket.on('bingo_start_with_config', (d) => {
+        const r = rooms[socket.roomId];
+        r.bingoGoal = d.goal;
+        r.bingoMarked = [];
+        r.turnIdx = 0;
+        r.bingoReadyCount = 0;
+        io.to(socket.roomId).emit('game_begin', { type: 'bingo', goal: d.goal });
+    });
+
+    socket.on('bingo_ready', () => {
+        const r = rooms[socket.roomId];
+        r.bingoReadyCount++;
+        if (r.bingoReadyCount === r.players.length) {
+            sendBingoTurn(socket.roomId);
+        } else {
+            io.to(socket.roomId).emit('toast', `等待其他玩家填寫... (${r.bingoReadyCount}/${r.players.length})`);
+        }
+    });
+
+    function sendBingoTurn(rid) {
+        const r = rooms[rid];
+        const player = r.players[r.turnIdx];
+        io.to(rid).emit('bingo_your_turn', { id: player.id, name: player.name });
     }
 
-    // --- 3. Bingo 邏輯 ---
     socket.on('bingo_pick', (d) => {
         const r = rooms[socket.roomId];
-        if (r && !r.bingoMarked.includes(d.num)) {
-            r.bingoMarked.push(d.num);
-            io.to(socket.roomId).emit('bingo_sync', { marked: r.bingoMarked });
-        }
+        r.bingoMarked.push(d.num);
+        io.to(socket.roomId).emit('bingo_sync', { marked: r.bingoMarked });
+        r.turnIdx = (r.turnIdx + 1) % r.players.length;
+        sendBingoTurn(socket.roomId);
     });
 
     socket.on('draw_stroke', (d) => socket.to(socket.roomId).emit('receive_stroke', d));
