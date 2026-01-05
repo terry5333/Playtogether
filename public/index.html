@@ -1,4 +1,35 @@
-<script src="bingo.js"></script>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Play Together</title>
+    </head>
+<body>
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script>
+        const socket = io(); 
+        let curRoom = "";
+        let isTurn = false;
+
+        function confirmJoin() {
+            const username = document.getElementById('username').value;
+            const roomId = document.getElementById('roomId').value;
+            if(username && roomId) {
+                curRoom = roomId;
+                socket.emit('join_room', { roomId, username });
+                document.getElementById('lobby').classList.add('hidden');
+                document.getElementById('game-area').classList.remove('hidden');
+                // 延遲初始化，確保 DOM 已生成
+                setTimeout(() => {
+                    if(typeof initBingoBoard === 'function') initBingoBoard();
+                    if(typeof initDraw === 'function') initDraw();
+                }, 100);
+            }
+        }
+    </script>
+
+    <script src="bingo.js"></script>
     <script src="draw.js"></script>
     <script src="spy.js"></script>
 </body>
