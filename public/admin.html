@@ -2,56 +2,46 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>上帝視角 - PartyBox Admin</title>
+    <title>上帝視角控制台</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body class="bg-slate-950 text-white p-8">
-    <div id="login-zone" class="max-w-md mx-auto bg-slate-900 p-8 rounded-3xl border border-slate-800">
-        <h1 class="text-2xl font-bold mb-4">管理員登入</h1>
-        <input id="key" type="password" class="w-full bg-slate-800 p-4 rounded-xl outline-none mb-4">
-        <button onclick="io().emit('admin_login', document.getElementById('key').value)" class="w-full bg-blue-600 p-4 rounded-xl">驗證</button>
+    <div id="auth-view" class="max-w-md mx-auto mt-20 p-8 bg-slate-900 rounded-3xl border border-slate-800 text-center">
+        <h2 class="text-2xl font-bold mb-6">管理員驗證</h2>
+        <input type="password" id="input-key" placeholder="1010215" class="w-full bg-slate-800 p-4 rounded-xl mb-4 text-center">
+        <button onclick="io().emit('admin_login', document.getElementById('input-key').value)" class="w-full bg-blue-600 p-4 rounded-xl font-bold">進入監控</button>
     </div>
 
-    <div id="admin-panel" class="hidden">
-        <h1 class="text-3xl font-black mb-8 text-blue-500">PartyBox 全知監控台</h1>
-        <div id="rooms-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    <div id="main-view" class="hidden">
+        <h1 class="text-3xl font-black text-blue-500 mb-8">PARTYBOX 實時監控</h1>
+        <div id="room-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
     </div>
 
     <script>
         const socket = io();
         socket.on('admin_auth_success', () => {
-            document.getElementById('login-zone').classList.add('hidden');
-            document.getElementById('admin-panel').classList.remove('hidden');
+            document.getElementById('auth-view').classList.add('hidden');
+            document.getElementById('main-view').classList.remove('hidden');
         });
 
-        socket.on('admin_monitor_update', rooms => {
-            const grid = document.getElementById('rooms-grid');
-            grid.innerHTML = rooms.map(room => `
+        socket.on('admin_monitor_update', (rooms) => {
+            document.getElementById('room-list').innerHTML = rooms.map(room => `
                 <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800">
                     <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-bold font-mono">#${room.id}</h2>
-                        <button onclick="closeRoom('${room.id}')" class="text-xs bg-red-600 px-2 py-1 rounded">解散</button>
+                        <h3 class="font-bold text-blue-400">房號: ${room.id} (${room.gameType})</h3>
+                        <span class="text-xs text-orange-400">答案: ${room.currentWord || '無'}</span>
                     </div>
-                    <div class="text-xs text-slate-500 mb-4">模式：${room.gameType}</div>
-                    <div class="space-y-3">
+                    <div class="space-y-2">
                         ${room.players.map(p => `
-                            <div class="bg-slate-800 p-3 rounded-xl flex gap-3 items-center">
-                                <div class="w-12 h-12 grid grid-cols-5 gap-0.5 bg-slate-700 p-0.5">
-                                    ${(p.bingoBoard.length > 0 ? p.bingoBoard : new Array(25).fill(0)).map(n => `<div class="bg-slate-900 text-[4px] flex items-center justify-center">${n||''}</div>`).join('')}
-                                </div>
-                                <div>
-                                    <div class="text-sm font-bold ${p.isHost?'text-blue-400':''}">${p.name}</div>
-                                    <div class="text-[10px] text-slate-400">身份：${p.role} (${p.word})</div>
-                                </div>
+                            <div class="text-xs bg-slate-800 p-2 rounded">
+                                ${p.name} - 分數: ${p.score} | 身份: ${p.role || '平民'} | 題目: ${p.word || '無'}
                             </div>
                         `).join('')}
                     </div>
                 </div>
             `).join('');
         });
-
-        function closeRoom(id) { socket.emit('admin_close_room', id); }
     </script>
 </body>
 </html>
