@@ -25,7 +25,7 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         socket.roomId = roomId;
         socket.username = username;
-        rooms[roomId].players.push({ id: socket.id, name: username, score: 0, ready: false, bingoBoard: [] });
+        rooms[roomId].players.push({ id: socket.id, name: username, score: 0, ready: false });
         syncData(roomId);
     });
 
@@ -39,7 +39,7 @@ io.on('connection', (socket) => {
 
         if (data.gameType === 'draw') sendDrawTurn(data.roomId);
         else if (data.gameType === 'spy') {
-            const pair = [["原子筆", "鉛筆"], ["西瓜", "香瓜"], ["火鍋", "烤肉"]][Math.floor(Math.random()*3)];
+            const pair = [["西瓜", "香瓜"], ["原子筆", "鉛筆"], ["火鍋", "烤肉"]][Math.floor(Math.random()*3)];
             const spyIdx = Math.floor(Math.random() * room.players.length);
             room.players.forEach((p, idx) => {
                 io.to(p.id).emit('game_begin', { gameType: 'spy', word: idx === spyIdx ? pair[1] : pair[0] });
@@ -55,7 +55,8 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('game_begin', { gameType: 'draw', drawerId: drawer.id, drawerName: drawer.name, roundInfo: `第 ${room.currentRound} / ${room.totalRounds} 輪` });
     }
 
-    socket.on('draw_submit_word', (d) => { rooms[d.roomId].currentWord = d.word; rooms[d.roomId].drawStartTime = Date.now(); });
+    socket.on('draw_submit_word', (d) => { if(rooms[d.roomId]) { rooms[d.roomId].currentWord = d.word; rooms[d.roomId].drawStartTime = Date.now(); } });
+    
     socket.on('draw_guess', (d) => {
         const room = rooms[d.roomId];
         if (room && d.guess.trim() === room.currentWord.trim()) {
@@ -69,7 +70,8 @@ io.on('connection', (socket) => {
 
     socket.on('bingo_ready', (d) => {
         const room = rooms[d.roomId];
-        room.players.find(p => p.id === socket.id).ready = true;
+        const p = room.players.find(p => p.id === socket.id);
+        if(p) { p.ready = true; p.bingoBoard = d.board; }
         if (room.players.every(pl => pl.ready)) { room.turnIdx = 0; room.bingoMarked = []; sendBingoTurn(d.roomId); }
     });
 
@@ -79,13 +81,14 @@ io.on('connection', (socket) => {
     }
 
     socket.on('bingo_pick', (d) => {
-        rooms[d.roomId].bingoMarked.push(parseInt(d.num));
-        rooms[d.roomId].turnIdx = (rooms[d.roomId].turnIdx + 1) % rooms[d.roomId].players.length;
+        const room = rooms[d.roomId];
+        room.bingoMarked.push(parseInt(d.num));
+        room.turnIdx = (room.turnIdx + 1) % room.players.length;
         sendBingoTurn(d.roomId);
     });
 
-    socket.on('admin_kick', (d) => { io.to(d.playerId).emit('toast', '你被管理員請離房間'); syncData(d.roomId); });
-    socket.on('admin_close_room', (rid) => { io.to(rid).emit('toast', '房間已被關閉'); delete rooms[rid]; });
+    socket.on('admin_kick', (d) => { io.to(d.playerId).emit('toast', '管理員已將你移除'); syncData(d.roomId); });
+    socket.on('admin_close_room', (rid) => { io.to(rid).emit('toast', '房間已關閉'); delete rooms[rid]; });
     socket.on('admin_login', (k) => { if(k===ADMIN_KEY) { socket.join('admin_group'); socket.emit('admin_auth_success'); } });
     socket.on('draw_stroke', (d) => socket.to(d.roomId).emit('receive_stroke', d));
     function syncData(rid) { if(rooms[rid]) io.to(rid).emit('room_update', { roomId: rid, players: rooms[rid].players, hostId: rooms[rid].host }); }
