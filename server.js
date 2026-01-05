@@ -10,7 +10,7 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
-const ADMIN_KEY = "admin123"; // 管理員進入密鑰
+const ADMIN_KEY = "bitch12345"; // 管理員進入密鑰
 
 // 管理員 API 接口
 app.get('/admin-data', (req, res) => {
