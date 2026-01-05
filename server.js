@@ -7,7 +7,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// 解決 404 問題
+// 解決 404 問題：指定 public 資料夾
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
@@ -28,19 +28,6 @@ io.on('connection', (socket) => {
         const room = rooms[data.roomId];
         if (!room || room.host !== socket.id) return;
         room.gameStarted = true;
-        
-        // 誰是臥底邏輯
-        if (room.gameType === 'spy') {
-            const wordPairs = [["泡麵", "拉麵"], ["蘋果", "水梨"], ["鋼筆", "原子筆"]];
-            const pair = wordPairs[Math.floor(Math.random() * wordPairs.length)];
-            const spyIdx = Math.floor(Math.random() * room.players.length);
-            room.players.forEach((p, idx) => {
-                io.to(p.id).emit('spy_setup', {
-                    role: (idx === spyIdx) ? "臥底" : "平民",
-                    word: (idx === spyIdx) ? pair[1] : pair[0]
-                });
-            });
-        }
         io.to(data.roomId).emit('game_begin', { 
             turnId: room.players[0].id, 
             turnName: room.players[0].name,
@@ -48,10 +35,9 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 🏆 關鍵修正：解決 502 與 RangeError
+    // 🏆 關鍵：解決 502 當機，使用 socket.to 轉發
     socket.on('drawing', (data) => {
         if (data.roomId) {
-            // 使用 socket.to 轉發給「除自己以外」的人，避免無限死循環
             socket.to(data.roomId).emit('render_drawing', data);
         }
     });
@@ -78,4 +64,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`Server is live on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Server is running on ${PORT}`));
