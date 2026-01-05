@@ -10,9 +10,9 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
-const ADMIN_KEY = "admin123"; // 管理員密鑰
+const ADMIN_KEY = "bitch12345";
 
-// 管理員數據接口
+// 管理員數據 API
 app.get('/admin-data', (req, res) => {
     if (req.query.key === ADMIN_KEY) {
         const stats = Object.entries(rooms).map(([id, data]) => ({
@@ -40,16 +40,12 @@ io.on('connection', (socket) => {
                 gameType, host: socket.id, players: [], 
                 gameStarted: false, winLines: 3, 
                 maxPlayers: parseInt(maxPlayers) || 10,
-                currentTurnIdx: 0, votes: {}
+                currentTurnIdx: 0, votes: {}, scores: {}, currentWord: ""
             };
         }
-
-        if (rooms[roomId].players.length < rooms[roomId].maxPlayers) {
-            rooms[roomId].players.push({ id: socket.id, name: username, isOut: false });
-            io.to(roomId).emit('room_update', rooms[roomId]);
-        } else {
-            socket.emit('error_msg', '房間已滿');
-        }
+        rooms[roomId].players.push({ id: socket.id, name: username, isOut: false });
+        rooms[roomId].scores[socket.id] = 0;
+        io.to(roomId).emit('room_update', rooms[roomId]);
     });
 
     socket.on('start_game', (data) => {
@@ -57,16 +53,33 @@ io.on('connection', (socket) => {
         if (!room || room.host !== socket.id) return;
         room.gameStarted = true;
         room.winLines = parseInt(data.winLines) || 3;
-        io.to(data.roomId).emit('game_begin', { turnId: room.players[0].id, winLines: room.winLines, gameType: room.gameType });
+        room.currentTurnIdx = 0;
         
-        if (room.gameType === 'spy') {
-            const wordPairs = [["香蕉", "芭樂"], ["電腦", "手機"]];
-            const pair = wordPairs[Math.floor(Math.random() * wordPairs.length)];
-            const spyIdx = Math.floor(Math.random() * room.players.length);
-            room.players.forEach((p, i) => {
-                io.to(p.id).emit('spy_setup', { role: (i === spyIdx) ? "臥底" : "平民", word: (i === spyIdx) ? pair[1] : pair[0] });
-            });
+        if (room.gameType === 'draw') {
+            nextDrawRound(data.roomId);
+        } else {
+            io.to(data.roomId).emit('game_begin', { turnId: room.players[0].id, winLines: room.winLines, gameType: room.gameType });
         }
+    });
+
+    // 你畫我猜：提交答案邏輯
+    socket.on('submit_guess', (data) => {
+        const room = rooms[data.roomId];
+        if (!room || room.gameType !== 'draw' || !room.currentWord) return;
+        const drawer = room.players[room.currentTurnIdx];
+        
+        if (data.guess === room.currentWord && socket.id !== drawer.id) {
+            room.scores[socket.id] += 10; // 猜對者
+            room.scores[drawer.id] += 5;   // 畫圖者
+            io.to(data.roomId).emit('correct_answer', { winner: data.username, word: room.currentWord, scores: room.scores });
+            
+            room.currentTurnIdx = (room.currentTurnIdx + 1) % room.players.length;
+            setTimeout(() => nextDrawRound(data.roomId), 3000);
+        }
+    });
+
+    socket.on('drawing', (data) => {
+        socket.to(data.roomId).emit('drawing', data);
     });
 
     socket.on('bingo_click', (data) => {
@@ -77,21 +90,6 @@ io.on('connection', (socket) => {
         io.to(data.roomId).emit('next_turn', { turnId: room.players[room.currentTurnIdx].id });
     });
 
-    socket.on('cast_vote', (data) => {
-        const room = rooms[data.roomId];
-        if (!room) return;
-        room.votes[data.targetId] = (room.votes[data.targetId] || 0) + 1;
-        const aliveCount = room.players.filter(p => !p.isOut).length;
-        if (Object.values(room.votes).reduce((a, b) => a + b, 0) >= aliveCount) {
-            const outId = Object.keys(room.votes).reduce((a, b) => room.votes[a] > room.votes[b] ? a : b);
-            const player = room.players.find(p => p.id === outId);
-            if (player) player.isOut = true;
-            io.to(data.roomId).emit('vote_result', { outPlayer: player.name });
-            room.votes = {};
-        }
-    });
-
-    // 管理員關閉房間邏輯
     socket.on('admin_close_room', (data) => {
         if (data.key === ADMIN_KEY && rooms[data.targetRoomId]) {
             io.to(data.targetRoomId).emit('force_disconnect', '房間已被管理員關閉');
@@ -106,5 +104,16 @@ io.on('connection', (socket) => {
         }
     });
 });
+
+function nextDrawRound(roomId) {
+    const room = rooms[roomId];
+    if (!room) return;
+    const words = ["蘋果", "鋼琴", "蜘蛛人", "珍珠奶茶", "漢堡"];
+    room.currentWord = words[Math.floor(Math.random() * words.length)];
+    const drawer = room.players[room.currentTurnIdx];
+    
+    io.to(roomId).emit('game_begin', { turnId: drawer.id, gameType: 'draw' });
+    io.to(drawer.id).emit('your_word', { word: room.currentWord });
+}
 
 server.listen(process.env.PORT || 3000, () => console.log("Server Live"));
