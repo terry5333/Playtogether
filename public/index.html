@@ -5,126 +5,98 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PartyBox 🌈 Healing</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        :root { --sand: #F2EBE1; --blue: #A2C2D8; --mint: #B2D8D8; --gray: #5D6D7E; --pink: #FAD0C4; }
-        body { background: var(--sand); color: var(--gray); font-family: 'PingFang TC', sans-serif; }
-        
-        .card { background: white; border-radius: 2.5rem; box-shadow: 0 15px 35px rgba(0,0,0,0.05); transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .card:hover { transform: translateY(-5px); }
-        
-        /* 💡 按鈕動畫與配色 */
-        .btn-blue { background: var(--blue); color: white; border-radius: 1.25rem; transition: all 0.2s; }
-        .btn-mint { background: var(--mint); color: #4A6A6A; font-weight: bold; border-radius: 1.25rem; transition: all 0.2s; }
-        .btn-bounce:active { transform: scale(0.92); }
-        
-        .input-soft { background: #F8F9F9; border: 2px solid transparent; border-radius: 1.25rem; outline: none; transition: 0.3s; }
-        .input-soft:focus { border-color: var(--blue); background: white; }
-
-        /* 房主星星動畫 */
-        .host-star { color: #F1C40F; animation: star-blink 1.5s infinite; }
-        @keyframes star-blink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.1); } }
-
-        /* Bingo 樣式 */
-        .bingo-cell { background: #fdfdfd; border: 1px solid #eee; border-radius: 12px; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .bingo-cell:hover { background: #f0f4f8; }
-        .marked { background: var(--mint) !important; color: white; animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        
-        @keyframes pop-in { 0% { transform: scale(0.5); } 100% { transform: scale(1); } }
+        :root { --sand: #F2EBE1; --blue: #A2C2D8; --mint: #B2D8D8; --gray: #5D6D7E; }
+        body { background: var(--sand); color: var(--gray); font-family: sans-serif; }
+        .card { background: white; border-radius: 2.5rem; box-shadow: 0 15px 35px rgba(0,0,0,0.05); }
+        .btn-blue { background: var(--blue); color: white; border-radius: 1.25rem; }
+        .btn-mint { background: var(--mint); color: #4A6A6A; font-weight: bold; border-radius: 1.25rem; }
+        .btn-active:active { transform: scale(0.95); opacity: 0.9; }
+        .host-star { color: #F1C40F; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
         .hidden { display: none !important; }
-
-        /* Toast 動畫 */
-        #toast { transition: 0.4s; transform: translateY(-20px); }
-        #toast.show { opacity: 1; transform: translateY(0); }
     </style>
 </head>
-<body class="flex items-center justify-center min-h-screen p-4 overflow-hidden">
-    <div id="toast" class="fixed top-8 bg-white/90 backdrop-blur text-gray-600 font-bold px-8 py-3 rounded-full shadow-xl opacity-0 z-[100] border border-gray-100 pointer-events-none"></div>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div id="toast" class="fixed top-8 bg-black/70 text-white px-6 py-3 rounded-full opacity-0 transition-opacity z-[999] pointer-events-none"></div>
 
     <section id="view-lobby" class="card p-8 w-full max-w-sm space-y-6 text-center">
-        <div>
-            <h1 class="text-4xl font-black tracking-tighter" style="color: var(--blue)">PARTY<span style="color: var(--mint)">BOX</span></h1>
-            <p class="text-[10px] font-bold text-gray-300 tracking-[0.2em] uppercase mt-1">✨ Healing Edition ✨</p>
-        </div>
+        <h1 class="text-4xl font-black" style="color: var(--blue)">PARTYBOX ✨</h1>
         
         <div id="login-area" class="space-y-4">
-            <div class="relative">
-                <input id="in-name" type="text" placeholder="🎨 你的名字" class="w-full p-4 input-soft text-center">
-            </div>
-            <button onpointerdown="handleCreate(event)" class="w-full p-5 btn-blue btn-bounce font-black text-lg shadow-lg shadow-blue-100">
+            <input id="in-name" type="text" placeholder="🎨 輸入暱稱..." class="w-full p-4 rounded-2xl bg-gray-100 text-center outline-none">
+            
+            <button onclick="handleCreate()" class="w-full p-5 btn-blue btn-active font-black text-lg">
                 創建房間 🏠
             </button>
+            
             <div class="flex gap-2">
-                <input id="in-room" type="number" placeholder="房號" class="w-2/3 p-4 input-soft text-center">
-                <button onpointerdown="handleJoin(event)" class="w-1/3 bg-gray-200 rounded-2xl font-bold text-gray-400 btn-bounce">加入</button>
+                <input id="in-room" type="number" placeholder="4位房號" class="w-2/3 p-4 rounded-2xl bg-gray-100 text-center outline-none">
+                <button onclick="handleJoin()" class="w-1/3 bg-gray-200 rounded-2xl font-bold text-gray-500 btn-active">加入</button>
             </div>
         </div>
 
-        <div id="room-info" class="hidden space-y-5 animate-in">
+        <div id="room-info" class="hidden space-y-5">
             <div class="py-4 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
-                <p class="text-[10px] font-black text-gray-400 tracking-widest mb-1">ROOM ID</p>
-                <h2 id="rid-text" class="text-5xl font-black tracking-tighter" style="color: var(--gray)">----</h2>
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">房號</p>
+                <h2 id="rid-text" class="text-5xl font-black">----</h2>
             </div>
             
-            <div class="text-left">
-                <p class="text-[10px] font-black text-gray-400 ml-2 mb-2 uppercase">玩家成員 👥</p>
-                <div id="player-list" class="grid grid-cols-1 gap-2"></div>
+            <div class="text-left space-y-2">
+                <p class="text-[10px] font-bold text-gray-400 ml-1">玩家名單 👥</p>
+                <div id="player-list" class="space-y-2"></div>
             </div>
 
-            <div id="host-zone" class="hidden pt-5 border-t border-gray-100 space-y-3">
-                <select id="set-goal" class="w-full p-4 bg-gray-50 rounded-2xl border-none text-sm font-bold text-gray-500">
-                    <option value="3">🎯 達成 3 條線勝</option>
-                    <option value="5">🎯 達成 5 條線勝</option>
+            <div id="host-zone" class="hidden pt-4 border-t space-y-3">
+                <select id="set-goal" class="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold text-gray-500">
+                    <option value="3">🎯 3 條線勝</option>
+                    <option value="5">🎯 5 條線勝</option>
                 </select>
-                <button onpointerdown="handleStart('bingo', event)" class="w-full p-5 btn-mint btn-bounce shadow-lg shadow-green-50 text-lg">
+                <button onclick="handleStart()" class="w-full p-5 btn-mint btn-active text-lg">
                     開始 數字賓果 🎲
                 </button>
             </div>
         </div>
     </section>
 
-    <section id="view-bingo" class="hidden card p-6 w-full max-w-sm space-y-4">
-        <div class="flex justify-between items-center px-2">
-            <div class="text-xs font-black text-gray-400">目標 <span id="target" class="text-blue-400">3</span> 條</div>
-            <div class="bg-mint px-3 py-1 rounded-full text-[10px] font-bold text-gray-500 bg-[#B2D8D8]">連線中：<span id="current">0</span></div>
-        </div>
-        <div id="board" class="grid grid-cols-5 gap-2"></div>
-        <p class="text-[10px] text-center text-gray-300 font-bold">🫧 點擊數字叫號，全體同步 🫧</p>
-    </section>
-
     <script>
+        // 初始化 Socket，帶入錯誤監聽
         const socket = io();
         let myRid, myUserName, bingoArr = [], goal = 3;
 
+        socket.on('connect', () => console.log("伺服器連線成功！"));
+        socket.on('connect_error', () => showToast("🔴 無法連線至伺服器，請重整"));
+
         function showToast(msg) {
             const t = document.getElementById('toast');
-            t.innerText = msg; t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 2000);
+            t.innerText = msg; t.style.opacity = 1;
+            setTimeout(() => t.style.opacity = 0, 2000);
         }
 
-        // 💡 核心：使用 event.preventDefault() 確保觸發
-        function handleCreate(e) {
-            if(e) e.preventDefault();
+        // 修改後的按鈕函數
+        function handleCreate() {
             myUserName = document.getElementById('in-name').value;
-            if(!myUserName) return showToast("🍭 先取個名字嘛！");
+            if(!myUserName) return showToast("🍭 請先輸入名字");
+            if(!socket.connected) return showToast("⏳ 連線中，請稍候再按一次");
+            
+            console.log("發送創建請求...");
             socket.emit('create_room');
-            showToast("✨ 正在準備房間...");
         }
 
-        function handleJoin(e) {
-            if(e) e.preventDefault();
+        function handleJoin() {
             myUserName = document.getElementById('in-name').value;
             let rid = document.getElementById('in-room').value;
-            if(!myUserName || !rid) return showToast("🧩 名字跟房號都要填喔！");
+            if(!myUserName || !rid) return showToast("🧩 名字跟房號都要填");
             socket.emit('join_room', {roomId: rid, username: myUserName});
         }
 
-        function handleStart(type, e) {
-            if(e) e.preventDefault();
-            socket.emit('start_game', {gameType: type, roomId: myRid, goal: document.getElementById('set-goal').value});
+        function handleStart() {
+            socket.emit('start_game', {gameType: 'bingo', roomId: myRid, goal: document.getElementById('set-goal').value});
         }
 
         socket.on('room_created', d => {
+            console.log("收到房號:", d.roomId);
             myRid = d.roomId;
             socket.emit('join_room', {roomId: d.roomId, username: myUserName});
         });
@@ -134,64 +106,16 @@
             document.getElementById('room-info').classList.remove('hidden');
             document.getElementById('rid-text').innerText = d.roomId;
             myRid = d.roomId;
-            
             document.getElementById('host-zone').classList.toggle('hidden', socket.id !== d.hostId);
             
             document.getElementById('player-list').innerHTML = d.players.map(p => `
-                <div class="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100 animate-pop">
-                    <span class="font-bold text-sm">
-                        ${p.id === d.hostId ? '<span class="host-star">★</span>' : '👤'} ${p.name}
-                    </span>
-                    ${p.id === socket.id ? '<span class="text-[10px] bg-blue-100 text-blue-500 px-2 py-0.5 rounded-full font-black">YOU</span>' : ''}
+                <div class="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <span class="font-bold text-sm">${p.id === d.hostId ? '<span class="host-star">★</span>' : '👤'} ${p.name}</span>
                 </div>
             `).join('');
         });
 
-        socket.on('game_begin', d => {
-            if(d.type === 'bingo') {
-                document.getElementById('view-lobby').classList.add('hidden');
-                document.getElementById('view-bingo').classList.remove('hidden');
-                goal = d.goal; document.getElementById('target').innerText = goal;
-                initBingo();
-            }
-        });
-
-        function initBingo() {
-            let n = 1; bingoArr = Array(25).fill(null);
-            const b = document.getElementById('board'); b.innerHTML = "";
-            for(let i=0; i<25; i++) {
-                let c = document.createElement('div'); c.className = "bingo-cell";
-                c.onpointerdown = (e) => {
-                    e.preventDefault();
-                    if(!bingoArr[i] && n <= 25) {
-                        c.innerText = n; bingoArr[i] = n; n++;
-                        if(n > 25) showToast("🎉 賓果盤填好了！開始叫號吧");
-                    } else if(bingoArr[i]) {
-                        socket.emit('bingo_pick', {roomId: myRid, num: bingoArr[i]});
-                    }
-                };
-                b.appendChild(c);
-            }
-        }
-
-        socket.on('bingo_sync', d => {
-            const cells = document.querySelectorAll('.bingo-cell');
-            cells.forEach((c, i) => { if(d.marked.includes(bingoArr[i])) c.classList.add('marked'); });
-            checkBingo(d.marked);
-        });
-
-        function checkBingo(marked) {
-            let lines = 0; const m = bingoArr.map(v => marked.includes(v));
-            for(let i=0; i<5; i++) if(m.slice(i*5, i*5+5).every(x=>x)) lines++;
-            for(let i=0; i<5; i++) if([0,1,2,3,4].every(j => m[i+j*5])) lines++;
-            if([0,6,12,18,24].every(i => m[i])) lines++; if([4,8,12,16,20].every(i => m[i])) lines++;
-            document.getElementById('current').innerText = lines;
-            if(lines >= goal) { showToast("🏆 恭喜！你達標了！"); }
-        }
-
         socket.on('toast', m => showToast(m));
-        socket.on('kicked_signal', () => { alert("你已被踢出房間"); location.reload(); });
-        socket.on('room_terminated', () => { alert("房間已被管理員解散"); location.reload(); });
     </script>
 </body>
 </html>
