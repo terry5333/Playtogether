@@ -2,64 +2,55 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>管理後台 | 派對遊戲</title>
+    <title>管理後台</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 p-8 font-sans">
-    <div id="auth-gate" class="fixed inset-0 bg-slate-900 flex items-center justify-center z-50">
-        <div class="bg-slate-800 p-10 rounded-[2.5rem] text-center border border-slate-700 shadow-2xl w-full max-w-sm">
-            <h2 class="text-2xl font-black mb-6 text-blue-400">ADMIN LOGIN</h2>
-            <input type="password" id="adminKey" placeholder="輸入密鑰" class="w-full bg-slate-900 border border-slate-600 p-4 rounded-2xl mb-4 outline-none focus:border-blue-500 text-center tracking-widest">
-            <button onclick="login()" class="w-full bg-blue-600 p-4 rounded-2xl font-bold hover:bg-blue-500 transition-all">驗證登入</button>
-        </div>
+    <div id="auth" class="max-w-sm mx-auto mt-20 text-center space-y-4">
+        <h1 class="text-2xl font-bold text-blue-400">ADMIN SYSTEM</h1>
+        <input type="password" id="key" placeholder="輸入密鑰" class="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none">
+        <button onclick="load()" class="w-full bg-blue-600 p-4 rounded-2xl font-bold">進入監控</button>
     </div>
 
-    <div id="content" class="hidden max-w-5xl mx-auto">
-        <div class="flex justify-between items-center mb-10">
-            <h1 class="text-3xl font-black tracking-tight">SERVER MONITOR</h1>
-            <button onclick="refresh()" class="bg-slate-700 px-6 py-2 rounded-xl text-xs font-bold hover:bg-slate-600">手動刷新</button>
+    <div id="content" class="hidden">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-black">伺服器監控室</h1>
+            <button onclick="load()" class="bg-slate-700 px-4 py-2 rounded-lg text-xs">手動刷新</button>
         </div>
-        <div class="bg-slate-800 rounded-[2rem] overflow-hidden border border-slate-700 shadow-xl">
-            <table class="w-full text-left">
-                <thead class="bg-slate-700/50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    <tr><th class="p-6">房號</th><th class="p-6">模式</th><th class="p-6">房長</th><th class="p-6">成員</th><th class="p-6 text-right">操作</th></tr>
-                </thead>
-                <tbody id="room-list"></tbody>
-            </table>
-        </div>
+        <div class="grid gap-4" id="room-list"></div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         let currentKey = "";
-        async function login() {
-            const key = document.getElementById('adminKey').value;
+        async function load() {
+            const key = document.getElementById('key').value;
             const res = await fetch(`/admin-data?key=${key}`);
             if(res.ok) {
                 currentKey = key;
-                document.getElementById('auth-gate').classList.add('hidden');
+                document.getElementById('auth').classList.add('hidden');
                 document.getElementById('content').classList.remove('hidden');
-                refresh();
+                const data = await res.json();
+                document.getElementById('room-list').innerHTML = data.rooms.map(r => `
+                    <div class="bg-slate-800 p-6 rounded-3xl border border-slate-700 flex justify-between items-center">
+                        <div>
+                            <span class="text-xs text-slate-500">房號: ${r.id} | 模式: ${r.gameType}</span>
+                            <h3 class="text-xl font-bold">${r.hostName} 的房間 (${r.playerCount} 人)</h3>
+                            <p class="text-sm text-slate-400">成員: ${r.players}</p>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="text-xs font-bold text-green-500">${r.started}</span>
+                            <button onclick="closeRoom('${r.id}')" class="text-red-500 font-bold hover:underline">強制關閉</button>
+                        </div>
+                    </div>
+                `).join('');
             } else alert("密鑰錯誤");
         }
-        async function refresh() {
-            const res = await fetch(`/admin-data?key=${currentKey}`);
-            const data = await res.json();
-            document.getElementById('room-list').innerHTML = data.rooms.map(r => `
-                <tr class="border-t border-slate-700 hover:bg-slate-700/30 transition-all">
-                    <td class="p-6 font-mono text-blue-400 font-bold">${r.id}</td>
-                    <td class="p-6"><span class="bg-orange-900/40 text-orange-400 px-3 py-1 rounded-full text-[10px] font-bold">${r.gameType}</span></td>
-                    <td class="p-6 font-bold text-slate-200">${r.hostName}</td>
-                    <td class="p-6 text-[10px] text-slate-500 max-w-xs truncate">${r.players}</td>
-                    <td class="p-6 text-right"><button onclick="closeRoom('${r.id}')" class="text-red-400 font-bold hover:underline">解散</button></td>
-                </tr>
-            `).join('');
-        }
         function closeRoom(id) {
-            if(confirm('確定要關閉房間？')) {
+            if(confirm("確定要強制關閉房號 " + id + " 嗎？")) {
                 socket.emit('admin_close_room', { key: currentKey, targetRoomId: id });
-                setTimeout(refresh, 500);
+                setTimeout(load, 500);
             }
         }
     </script>
