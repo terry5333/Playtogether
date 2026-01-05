@@ -1,54 +1,81 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
+    <title>遊戲盒-管理後台</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-900 text-white p-8">
-    <div class="max-w-4xl mx-auto">
-        <div class="flex justify-between mb-8">
-            <h1 class="text-2xl font-bold">管理後台</h1>
-            <div class="flex gap-2">
-                <input type="password" id="adminKey" placeholder="密鑰" class="bg-slate-800 p-2 rounded">
-                <button onclick="loadData()" class="bg-blue-600 px-4 py-2 rounded">刷新</button>
-            </div>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    <div id="auth-gate" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center">
+        <div class="bg-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-slate-700 text-center">
+            <h1 class="text-2xl font-black mb-6">管理員驗證</h1>
+            <input type="password" id="adminKey" placeholder="請輸入密鑰" class="w-full bg-slate-900 border border-slate-600 p-4 rounded-xl mb-4 outline-none focus:border-blue-500">
+            <button onclick="login()" class="w-full bg-blue-600 hover:bg-blue-700 p-4 rounded-xl font-bold transition">進入系統</button>
         </div>
-        <div class="bg-slate-800 rounded-xl overflow-hidden">
-            <table class="w-full text-left text-sm">
-                <thead class="bg-slate-700 uppercase">
+    </div>
+
+    <div id="admin-content" class="hidden p-8 max-w-5xl mx-auto">
+        <div class="flex justify-between items-center mb-10">
+            <h2 class="text-3xl font-black tracking-tighter">系統監控總覽</h2>
+            <button onclick="fetchData()" class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-xl text-sm font-bold">手動刷新</button>
+        </div>
+
+        <div class="bg-slate-800 rounded-[2rem] border border-slate-700 overflow-hidden shadow-xl">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-700/50 text-slate-400 text-xs font-black uppercase">
                     <tr>
-                        <th class="p-4">房間ID</th>
-                        <th class="p-4">創建者</th>
-                        <th class="p-4">玩家名單</th>
-                        <th class="p-4">操作</th>
+                        <th class="p-6">房號</th>
+                        <th class="p-6">目前遊戲模式</th>
+                        <th class="p-6">房長(創建者)</th>
+                        <th class="p-6">房間名單</th>
+                        <th class="p-6">操作</th>
                     </tr>
                 </thead>
-                <tbody id="list"></tbody>
+                <tbody id="room-table-body"></tbody>
             </table>
         </div>
     </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        async function loadData() {
+        let currentKey = "";
+
+        async function login() {
             const key = document.getElementById('adminKey').value;
             const res = await fetch(`/admin-data?key=${key}`);
+            if (res.ok) {
+                currentKey = key;
+                document.getElementById('auth-gate').classList.add('hidden');
+                document.getElementById('admin-content').classList.remove('hidden');
+                fetchData();
+            } else {
+                alert("密鑰錯誤！");
+            }
+        }
+
+        async function fetchData() {
+            const res = await fetch(`/admin-data?key=${currentKey}`);
             const data = await res.json();
-            document.getElementById('list').innerHTML = data.rooms.map(r => `
-                <tr class="border-t border-slate-700">
-                    <td class="p-4">${r.id}</td>
-                    <td class="p-4 text-orange-400 font-bold">${r.hostName}</td>
-                    <td class="p-4 text-slate-400">${r.players.join(', ')}</td>
-                    <td class="p-4">
-                        <button onclick="closeRoom('${r.id}')" class="text-red-400">強制關閉</button>
+            const body = document.getElementById('room-table-body');
+            body.innerHTML = data.rooms.map(r => `
+                <tr class="border-t border-slate-700 hover:bg-slate-700/20 transition">
+                    <td class="p-6 font-mono text-blue-400 font-bold">${r.id}</td>
+                    <td class="p-6 font-bold text-orange-400">${r.gameType}</td>
+                    <td class="p-6 font-bold">${r.hostName}</td>
+                    <td class="p-6 text-sm text-slate-400">${r.players.join(', ')}</td>
+                    <td class="p-6">
+                        <button onclick="closeRoom('${r.id}')" class="text-red-400 hover:text-red-300 font-bold">強制解散</button>
                     </td>
                 </tr>
             `).join('');
         }
+
         function closeRoom(id) {
-            const key = document.getElementById('adminKey').value;
-            socket.emit('admin_close_room', { key, targetRoomId: id });
-            setTimeout(loadData, 500);
+            if (confirm(`確定要解散房間 ${id} 嗎？`)) {
+                socket.emit('admin_close_room', { key: currentKey, targetRoomId: id });
+                setTimeout(fetchData, 500);
+            }
         }
     </script>
 </body>
