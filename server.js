@@ -34,95 +34,60 @@ io.on('connection', (socket) => {
         if (!room) return;
         room.gameType = data.gameType;
         room.totalRounds = parseInt(data.settings.rounds) || 1;
-        room.turnIdx = 0;
-        room.currentRound = 1;
+        room.turnIdx = 0; room.currentRound = 1;
         room.players.forEach(p => { p.score = 0; p.ready = false; });
 
-        if (data.gameType === 'draw') {
-            sendDrawTurn(data.roomId);
-        } else if (data.gameType === 'spy') {
-            const pair = [["西瓜", "香瓜"], ["原子筆", "鉛筆"], ["老師", "教授"]][Math.floor(Math.random()*3)];
+        if (data.gameType === 'draw') sendDrawTurn(data.roomId);
+        else if (data.gameType === 'spy') {
+            const pair = [["原子筆", "鉛筆"], ["西瓜", "香瓜"], ["火鍋", "烤肉"]][Math.floor(Math.random()*3)];
             const spyIdx = Math.floor(Math.random() * room.players.length);
             room.players.forEach((p, idx) => {
-                const word = (idx === spyIdx ? pair[1] : pair[0]);
-                io.to(p.id).emit('game_begin', { gameType: 'spy', word: word });
+                io.to(p.id).emit('game_begin', { gameType: 'spy', word: idx === spyIdx ? pair[1] : pair[0] });
             });
-        } else if (data.gameType === 'bingo') {
-            io.to(data.roomId).emit('game_begin', { gameType: 'bingo_prepare' });
         }
+        else if (data.gameType === 'bingo') io.to(data.roomId).emit('game_begin', { gameType: 'bingo_prepare' });
     });
 
-    // 你話我猜：精確輪次邏輯
     function sendDrawTurn(roomId) {
         const room = rooms[roomId];
-        if (room.currentRound > room.totalRounds) {
-            io.to(roomId).emit('game_over', { scores: room.players.sort((a,b) => b.score - a.score) });
-            return;
-        }
+        if (room.currentRound > room.totalRounds) return io.to(roomId).emit('game_over', { scores: room.players.sort((a,b)=>b.score-a.score) });
         const drawer = room.players[room.turnIdx];
-        room.currentWord = ""; 
-        io.to(roomId).emit('game_begin', { 
-            gameType: 'draw', drawerId: drawer.id, drawerName: drawer.name,
-            roundInfo: `第 ${room.currentRound} / ${room.totalRounds} 輪`
-        });
+        io.to(roomId).emit('game_begin', { gameType: 'draw', drawerId: drawer.id, drawerName: drawer.name, roundInfo: `第 ${room.currentRound} / ${room.totalRounds} 輪` });
     }
 
     socket.on('draw_submit_word', (d) => { rooms[d.roomId].currentWord = d.word; rooms[d.roomId].drawStartTime = Date.now(); });
-
     socket.on('draw_guess', (d) => {
         const room = rooms[d.roomId];
         if (room && d.guess.trim() === room.currentWord.trim()) {
-            const winner = room.players.find(p => p.id === socket.id);
-            const elapsed = (Date.now() - room.drawStartTime) / 1000;
-            winner.score += (elapsed <= 60 ? 3 : (elapsed <= 120 ? 2 : 1));
-            
+            room.players.find(p => p.id === socket.id).score += 2;
             room.turnIdx++;
-            if (room.turnIdx >= room.players.length) {
-                room.turnIdx = 0;
-                room.currentRound++;
-            }
+            if (room.turnIdx >= room.players.length) { room.turnIdx = 0; room.currentRound++; }
             io.to(d.roomId).emit('toast', `${socket.username} 答對了！`, '#16a34a');
             setTimeout(() => sendDrawTurn(d.roomId), 2000);
         }
     });
 
-    // 賓果準備與叫號邏輯
     socket.on('bingo_ready', (d) => {
         const room = rooms[d.roomId];
-        const p = room.players.find(p => p.id === socket.id);
-        p.ready = true;
-        p.bingoBoard = d.board;
-        if (room.players.every(pl => pl.ready)) {
-            room.turnIdx = 0;
-            room.bingoMarked = [];
-            sendBingoTurn(d.roomId);
-        }
+        room.players.find(p => p.id === socket.id).ready = true;
+        if (room.players.every(pl => pl.ready)) { room.turnIdx = 0; room.bingoMarked = []; sendBingoTurn(d.roomId); }
     });
 
     function sendBingoTurn(roomId) {
         const room = rooms[roomId];
-        const player = room.players[room.turnIdx];
-        io.to(roomId).emit('bingo_start', { turnName: player.name, turnId: player.id, marked: room.bingoMarked });
+        io.to(roomId).emit('bingo_start', { turnName: room.players[room.turnIdx].name, turnId: room.players[room.turnIdx].id, marked: room.bingoMarked });
     }
 
     socket.on('bingo_pick', (d) => {
-        const room = rooms[d.roomId];
-        room.bingoMarked.push(d.num);
-        room.turnIdx = (room.turnIdx + 1) % room.players.length;
+        rooms[d.roomId].bingoMarked.push(parseInt(d.num));
+        rooms[d.roomId].turnIdx = (rooms[d.roomId].turnIdx + 1) % rooms[d.roomId].players.length;
         sendBingoTurn(d.roomId);
     });
 
-    // 管理員控制功能
-    socket.on('admin_kick', (d) => {
-        io.to(d.playerId).emit('toast', '你已被管理員踢出');
-        syncData(d.roomId);
-    });
-    socket.on('admin_close_room', (rid) => {
-        io.to(rid).emit('toast', '房間已關閉');
-        delete rooms[rid];
-    });
-
+    socket.on('admin_kick', (d) => { io.to(d.playerId).emit('toast', '你被管理員請離房間'); syncData(d.roomId); });
+    socket.on('admin_close_room', (rid) => { io.to(rid).emit('toast', '房間已被關閉'); delete rooms[rid]; });
+    socket.on('admin_login', (k) => { if(k===ADMIN_KEY) { socket.join('admin_group'); socket.emit('admin_auth_success'); } });
+    socket.on('draw_stroke', (d) => socket.to(d.roomId).emit('receive_stroke', d));
     function syncData(rid) { if(rooms[rid]) io.to(rid).emit('room_update', { roomId: rid, players: rooms[rid].players, hostId: rooms[rid].host }); }
-    socket.on('admin_login', (k) => { if(k===ADMIN_KEY){ socket.join('admin_group'); socket.emit('admin_auth_success'); } });
 });
 server.listen(3000);
