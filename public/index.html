@@ -7,13 +7,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { background: #020617; color: white; }
+        body { background: #020617; color: white; font-family: sans-serif; }
         .view { display: none; min-height: 100vh; flex-direction: column; padding: 20px; }
         .active { display: flex; }
         .glass { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
-        .bingo-cell { aspect-ratio: 1; border: 1px solid #334155; border-radius: 8px; font-weight: bold; font-size: 20px; }
-        .bingo-filled { background: #0891b2; border-color: #22d3ee; }
-        canvas { background: white; border-radius: 20px; touch-action: none; }
+        .bingo-cell { aspect-ratio: 1; border: 1px solid #334155; border-radius: 8px; font-size: 20px; transition: 0.2s; }
+        .bingo-filled { background: #0891b2; border-color: #22d3ee; box-shadow: 0 0 15px #0891b2; }
     </style>
 </head>
 <body>
@@ -21,131 +20,88 @@
     <div id="cfg-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6">
         <div class="glass p-8 rounded-[3rem] w-full max-w-sm text-center">
             <h3 id="cfg-title" class="text-xl font-bold mb-6 text-cyan-400"></h3>
-            <div id="cfg-body" class="mb-8"></div>
-            <button onclick="sendStart()" class="w-full bg-cyan-600 p-4 rounded-2xl font-black">正式啟動</button>
+            <div id="cfg-body" class="mb-8 text-slate-400 text-sm"></div>
+            <input id="cfg-input" type="number" class="w-full bg-white/10 p-4 rounded-2xl text-center mb-8 outline-none border border-white/10 focus:border-cyan-500">
+            <button onclick="commitStart()" class="w-full bg-cyan-600 p-4 rounded-2xl font-black active:scale-95 transition">確認開始</button>
         </div>
     </div>
 
     <section id="v-play" class="view">
-        <div id="g-header" class="flex justify-between items-center mb-4"></div>
-        <div id="g-content" class="flex-1"></div>
+        <div id="game-ui" class="flex-1 flex flex-col"></div>
     </section>
 
     <script>
         const socket = io();
-        let myUser, myPin, selectedMode;
-        let bingoBoard = Array(25).fill(null), fillCount = 0;
+        let myUser, curMode, bingoBoard = Array(25).fill(null), fillIdx = 0;
 
-        // --- 房主設定流 ---
-        function openConfig(mode) {
-            selectedMode = mode;
-            const modal = document.getElementById('cfg-modal');
-            const body = document.getElementById('cfg-body');
-            const title = document.getElementById('cfg-title');
-            modal.classList.remove('hidden');
-            
-            if (mode === 'SPY') {
-                title.innerText = "誰是臥底 - 設定秒數";
-                body.innerHTML = `<input id="cfg-val" type="number" value="60" class="w-full bg-white/10 p-4 rounded-xl text-center">`;
-            } else if (mode === 'BINGO') {
-                title.innerText = "Bingo - 連線數獲勝";
-                body.innerHTML = `<input id="cfg-val" type="number" value="3" class="w-full bg-white/10 p-4 rounded-xl text-center">`;
-            } else if (mode === 'GUESS') {
-                title.innerText = "你話我猜 - 總回合數";
-                body.innerHTML = `<input id="cfg-val" type="number" value="3" class="w-full bg-white/10 p-4 rounded-xl text-center">`;
-            }
+        function go(id) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
         }
 
-        function sendStart() {
-            const v = document.getElementById('cfg-val').value;
-            socket.emit('confirm_start', { mode: selectedMode, val: v });
+        // --- 房主啟動邏輯 ---
+        function openGameConfig(mode) {
+            curMode = mode;
+            const modal = document.getElementById('cfg-modal');
+            const title = document.getElementById('cfg-title');
+            const body = document.getElementById('cfg-body');
+            const input = document.getElementById('cfg-input');
+            
+            modal.classList.remove('hidden');
+            if(mode === 'SPY') { title.innerText = "誰是臥底"; body.innerText = "請輸入討論秒數"; input.value = 60; }
+            if(mode === 'BINGO') { title.innerText = "Bingo"; body.innerText = "請輸入獲勝連線數"; input.value = 3; }
+            if(mode === 'GUESS') { title.innerText = "你話我猜"; body.innerText = "請輸入總回合數"; input.value = 3; }
+        }
+
+        function commitStart() {
+            const val = document.getElementById('cfg-input').value;
+            socket.emit('confirm_start', { mode: curMode, val: val });
             document.getElementById('cfg-modal').classList.add('hidden');
         }
 
         // --- 遊戲初始化路由 ---
         socket.on('game_init', (data) => {
             go('v-play');
-            if (data.type === 'SPY') initSpy(data);
-            if (data.type === 'BINGO') initBingo(data);
-            if (data.type === 'GUESS') initGuess(data);
+            const container = document.getElementById('game-ui');
+            
+            if (data.type === 'SPY') {
+                container.innerHTML = `
+                    <div class="text-center py-10">
+                        <p class="text-slate-500 mb-2">你的題目</p>
+                        <h1 class="text-5xl font-black text-cyan-400 mb-8">${data.word}</h1>
+                        <div id="timer" class="text-4xl font-mono text-red-500">${data.timer}s</div>
+                    </div>`;
+                let s = data.timer;
+                const t = setInterval(() => {
+                    s--; document.getElementById('timer').innerText = s + 's';
+                    if(s <= 0) clearInterval(t);
+                }, 1000);
+            }
+
+            if (data.type === 'BINGO') {
+                container.innerHTML = `
+                    <div class="text-center">
+                        <p id="b-hint" class="text-cyan-500 mb-4 animate-pulse">請依序點擊格子填入 1-25</p>
+                        <div id="bingo-grid" class="grid grid-cols-5 gap-2"></div>
+                    </div>`;
+                const grid = document.getElementById('bingo-grid');
+                for(let i=0; i<25; i++) {
+                    const btn = document.createElement('button');
+                    btn.className = 'bingo-cell glass';
+                    btn.onclick = () => {
+                        if(bingoBoard[i]) return;
+                        fillIdx++;
+                        bingoBoard[i] = fillIdx;
+                        btn.innerText = fillIdx;
+                        btn.classList.add('bingo-filled');
+                        if(fillIdx === 25) document.getElementById('b-hint').innerText = "填寫完成，等待開號！";
+                    };
+                    grid.appendChild(btn);
+                }
+            }
         });
 
-        // 1. 誰是臥底：計時與投票
-        function initSpy(data) {
-            const content = document.getElementById('g-content');
-            content.innerHTML = `
-                <div class="text-center">
-                    <h1 class="text-slate-500 text-sm">你的題目</h1>
-                    <div class="text-5xl font-black text-cyan-400 my-6">${data.word}</div>
-                    <div id="timer" class="text-3xl font-mono text-red-500 mb-8">${data.timer}s</div>
-                    <div class="grid grid-cols-2 gap-2" id="spy-votes"></div>
-                </div>`;
-            let s = data.timer;
-            const t = setInterval(() => {
-                s--; document.getElementById('timer').innerText = s + 's';
-                if (s <= 0) { clearInterval(t); alert('討論時間到！開始投票'); }
-            }, 1000);
-        }
-
-        // 2. Bingo：觸控填號
-        function initBingo(data) {
-            const content = document.getElementById('g-content');
-            content.innerHTML = `
-                <div class="text-center">
-                    <p id="b-hint" class="text-xs mb-4">點擊空格填入數字 1-25</p>
-                    <div class="grid grid-cols-5 gap-1" id="b-grid"></div>
-                </div>`;
-            const grid = document.getElementById('b-grid');
-            for(let i=0; i<25; i++) {
-                const b = document.createElement('button');
-                b.className = 'bingo-cell glass';
-                b.onclick = () => {
-                    if (bingoBoard[i]) return;
-                    fillCount++;
-                    bingoBoard[i] = fillCount;
-                    b.innerText = fillCount;
-                    b.classList.add('bingo-filled');
-                    if(fillCount === 25) { 
-                        document.getElementById('b-hint').innerText = "填寫完成！等待開號";
-                        socket.emit('bingo_ready');
-                    }
-                };
-                grid.appendChild(b);
-            }
-        }
-
-        // 3. 你話我猜：回合制畫布
-        function initGuess(data) {
-            const content = document.getElementById('g-content');
-            content.innerHTML = `
-                <div class="space-y-4">
-                    <div class="flex justify-between text-xs"><span>第 ${data.currentRound} 回合</span><span id="drawer">正在畫：載入中</span></div>
-                    <canvas id="canvas" width="350" height="400"></canvas>
-                    <input id="ans" placeholder="輸入答案..." class="w-full p-4 bg-white/10 rounded-2xl border border-white/10">
-                </div>`;
-            setupCanvas();
-        }
-
-        function setupCanvas() {
-            const cvs = document.getElementById('canvas');
-            const ctx = cvs.getContext('2d');
-            let drawing = false;
-            cvs.onmousedown = () => drawing = true;
-            cvs.onmouseup = () => drawing = false;
-            cvs.onmousemove = (e) => {
-                if(!drawing) return;
-                const rect = cvs.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                ctx.fillStyle = "black";
-                ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fill();
-                socket.emit('draw_data', {x, y});
-            };
-            socket.on('on_draw', (p) => {
-                ctx.fillStyle = "black";
-                ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
-            });
-        }
+        // 更多遊戲邏輯可以在此擴展...
     </script>
 </body>
 </html>
