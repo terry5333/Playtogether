@@ -2,84 +2,55 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>PartyBox Admin Panel</title>
+    <title>Admin Panel</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
-<body class="bg-slate-900 text-white p-6 font-sans">
-    <div class="max-w-6xl mx-auto space-y-8">
-        <header class="flex justify-between items-center border-b border-slate-800 pb-6">
-            <h1 class="text-3xl font-black tracking-tighter">ADMIN <span class="text-blue-500">CONTROL</span></h1>
-            <div class="px-4 py-1 bg-green-500/10 text-green-500 rounded-full text-xs font-bold border border-green-500/20">SERVER ONLINE</div>
-        </header>
-
-        <div class="grid lg:grid-cols-3 gap-8">
-            <div class="lg:col-span-2 space-y-4">
-                <h2 class="text-slate-500 font-bold text-xs uppercase tracking-widest">Active Rooms</h2>
-                <div id="room-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-            </div>
-
-            <div class="space-y-4">
-                <h2 class="text-slate-500 font-bold text-xs uppercase tracking-widest">User Profile</h2>
-                <div id="profile-card" class="hidden bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 text-center animate-in fade-in zoom-in duration-300">
-                    <div id="prof-avatar" class="text-7xl mb-4">👤</div>
-                    <div id="prof-name" class="text-2xl font-black mb-1">---</div>
-                    <div id="prof-score" class="text-blue-400 font-bold mb-6">Score: 0</div>
-                    <button onclick="document.getElementById('profile-card').classList.add('hidden')" class="w-full py-3 bg-slate-700 rounded-2xl text-sm font-bold hover:bg-slate-600 transition">Close Profile</button>
-                </div>
-                <div id="profile-placeholder" class="bg-slate-800/50 border-2 border-dashed border-slate-700 h-40 rounded-[2.5rem] flex items-center justify-center text-slate-600 italic text-sm">
-                    Select a player to view profile
-                </div>
-            </div>
+<body class="bg-gray-950 text-slate-200 p-8">
+    <div class="max-w-7xl mx-auto grid lg:grid-cols-2 gap-8">
+        <div class="bg-gray-900 p-6 rounded-3xl border border-gray-800">
+            <h2 class="text-xl font-bold mb-4">🏆 玩家清單與戰績</h2>
+            <div id="user-list" class="space-y-2"></div>
+        </div>
+        <div class="bg-gray-900 p-6 rounded-3xl border border-gray-800">
+            <h2 class="text-xl font-bold mb-4">🎮 即時房間監控</h2>
+            <div id="room-monitor" class="space-y-4"></div>
         </div>
     </div>
 
     <script>
         const socket = io();
-        socket.on('connect', () => socket.emit('admin_init'));
+        socket.emit('admin_init');
 
-        socket.on('admin_data_update', d => {
-            const list = document.getElementById('room-list');
-            if (d.rooms.length === 0) {
-                list.innerHTML = `<div class="col-span-2 py-10 text-center text-slate-700 bg-slate-800/20 rounded-3xl">No active rooms at the moment</div>`;
-                return;
-            }
-            list.innerHTML = d.rooms.map(r => `
-                <div class="bg-slate-800 p-6 rounded-[2rem] border border-slate-700 space-y-4">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <span class="text-xs font-bold text-slate-500">ROOM</span>
-                            <div class="text-xl font-black text-blue-400">#${r.id}</div>
-                        </div>
-                        <button onclick="socket.emit('admin_close_room','${r.id}')" class="bg-red-500/10 text-red-500 px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-red-500 hover:text-white transition">CLOSE</button>
+        socket.on('admin_full_update', data => {
+            document.getElementById('user-list').innerHTML = data.users.map(u => `
+                <div class="flex justify-between items-center bg-gray-800 p-3 rounded-xl">
+                    <span>${u.avatar} <b>${u.username}</b> (${u.pin})</span>
+                    <div class="flex items-center gap-4">
+                        <span class="text-indigo-400 font-bold">${u.score} PT</span>
+                        <button onclick="socket.emit('admin_delete_user','${u._id}')" class="text-red-500 text-xs">刪除</button>
                     </div>
-                    <div class="space-y-2">
-                        <div class="text-[10px] font-bold text-slate-600 uppercase">Players (${r.players.length})</div>
+                </div>
+            `).join('');
+
+            const rm = document.getElementById('room-monitor');
+            if(data.rooms.length === 0) { rm.innerHTML = "目前無房間"; return; }
+            rm.innerHTML = data.rooms.map(r => `
+                <div class="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                    <div class="flex justify-between mb-3">
+                        <span class="bg-indigo-600 px-2 rounded">#${r.id}</span>
+                        <button onclick="socket.emit('admin_close_room','${r.id}')" class="text-red-400 text-xs">關閉房間</button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
                         ${r.players.map(p => `
-                            <div class="flex justify-between items-center bg-slate-900/50 p-2 rounded-xl border border-slate-700">
-                                <span class="text-xs font-bold">${p.avatar} ${p.username}</span>
-                                <div class="flex gap-1">
-                                    <button onclick="viewUser('${p.username}')" class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-[10px] font-bold">PROFILE</button>
-                                    <button onclick="socket.emit('admin_kick_player',{playerId:'${p.id}'})" class="px-2 py-1 bg-orange-500/20 text-orange-400 rounded text-[10px] font-bold">KICK</button>
-                                </div>
+                            <div class="text-xs bg-gray-900 p-2 rounded flex justify-between">
+                                <span>${p.avatar} ${p.username}</span>
+                                <button onclick="socket.emit('admin_kick_player',{roomId:'${r.id}',socketId:'${p.socketId}'})" class="text-orange-500">踢出</button>
                             </div>
                         `).join('')}
                     </div>
                 </div>
             `).join('');
-        });
-
-        function viewUser(name) {
-            socket.emit('admin_get_user_profile', name);
-        }
-
-        socket.on('admin_receive_profile', u => {
-            document.getElementById('profile-placeholder').classList.add('hidden');
-            const card = document.getElementById('profile-card');
-            card.classList.remove('hidden');
-            document.getElementById('prof-avatar').innerText = u.avatar;
-            document.getElementById('prof-name').innerText = u.username;
-            document.getElementById('prof-score').innerText = `Total Score: ${u.score} pt`;
         });
     </script>
 </body>
