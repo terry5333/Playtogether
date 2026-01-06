@@ -8,16 +8,16 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// 確保 /admin 路由能正確開啟 admin.html
+// 路由：確保輸入 /admin 能看到上帝控制台
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
-let memoryDB = {}; // 存儲玩家資料 { pin: { username, avatar, score } }
-let rooms = {};    // 存儲房間資料 { rid: { id, hostPin, players: [] } }
+let memoryDB = {}; // 玩家個資 { pin: { username, avatar, score } }
+let rooms = {};    // 房間數據 { rid: { id, hostPin, players: [] } }
 
 const spyLibrary = [['西瓜', '哈密瓜'], ['牙醫', '護士'], ['火鍋', '燒烤'], ['珍珠奶茶', '絲襪奶茶']];
 
 io.on('connection', (socket) => {
-    // --- 基礎登入與房間邏輯 ---
+    // --- 玩家登入與房間 ---
     socket.on('save_profile', (data) => {
         memoryDB[data.pin] = { ...data, score: memoryDB[data.pin]?.score || 0 };
         socket.userPin = data.pin;
@@ -41,16 +41,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- 上帝視角 Admin 管理功能 ---
+    // --- 上帝視角：Admin API ---
     socket.on('admin_login', (pass) => {
-        if (pass === "9999") { // 預設密碼
+        if (pass === "9999") { 
             socket.emit('admin_data', { rooms: Object.values(rooms), users: Object.values(memoryDB) });
         }
-    });
-
-    socket.on('admin_kick_room', (rid) => {
-        io.to(rid).emit('error_msg', '管理員已解散此房間');
-        delete rooms[rid];
     });
 
     socket.on('admin_update_user', (data) => {
@@ -60,7 +55,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- 房主設定與遊戲啟動 ---
+    // --- 遊戲設定流 ---
     socket.on('host_setup_trigger', (mode) => {
         const r = rooms[socket.roomId];
         if (r && r.hostPin === socket.userPin) {
