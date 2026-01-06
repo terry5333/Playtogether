@@ -10,14 +10,14 @@ const db = new Datastore({ filename: 'users.db', autoload: true });
 app.use(express.static('public'));
 
 io.on('connection', (socket) => {
-    // 檢查 PIN
+    // 1. PIN 檢查邏輯
     socket.on('check_pin', (pin) => {
         db.findOne({ pin: pin }, (err, user) => {
             socket.emit('pin_result', { exists: !!user, user: user });
         });
     });
 
-    // 儲存資料
+    // 2. 儲存個人資料 (確保回調機制)
     socket.on('save_profile', (data) => {
         if (!data || !data.pin) return;
         db.update({ pin: data.pin }, { $set: data }, { upsert: true }, (err) => {
@@ -27,11 +27,17 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 房間與遊戲邏輯 (略，與前版一致)
+    // 3. 創建與加入房間
     socket.on('create_room', () => {
         const rid = Math.floor(1000 + Math.random() * 9000).toString();
         socket.emit('room_created', rid);
     });
+
+    socket.on('join_room', (data) => {
+        socket.join(data.roomId);
+        socket.emit('room_update', { id: data.roomId });
+    });
 });
 
-server.listen(process.env.PORT || 3000);
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log('伺服器啟動完成'));
