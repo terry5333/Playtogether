@@ -1,57 +1,151 @@
-<div id="admin-panel" class="hidden glass p-6 rounded-[2rem] border border-yellow-500/20">
-    <h4 class="text-[10px] text-yellow-500 mb-4 font-bold uppercase">Admin 控制台</h4>
-    <div class="grid grid-cols-2 gap-3">
-        <button onclick="socket.emit('select_mode','SPY')" class="bg-white/5 p-4 rounded-xl text-xs">🕵️ 誰是臥底</button>
-        <button onclick="socket.emit('select_mode','BINGO')" class="bg-white/5 p-4 rounded-xl text-xs">🔢 Bingo</button>
-        <button onclick="socket.emit('select_mode','GUESS')" class="bg-white/5 p-4 rounded-xl text-xs">✍️ 你話我猜</button>
-        <button onclick="socket.emit('select_mode','MEMORY')" class="bg-white/5 p-4 rounded-xl text-xs">🧠 記憶翻牌</button>
-    </div>
-</div>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PartyBox Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { background: #020617; color: white; }
+        .view { display: none; min-height: 100vh; flex-direction: column; padding: 20px; }
+        .active { display: flex; }
+        .glass { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
+        .bingo-cell { aspect-ratio: 1; border: 1px solid #334155; border-radius: 8px; font-weight: bold; font-size: 20px; }
+        .bingo-filled { background: #0891b2; border-color: #22d3ee; }
+        canvas { background: white; border-radius: 20px; touch-action: none; }
+    </style>
+</head>
+<body>
 
-<div id="cfg-modal" class="hidden fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-6">
-    <div class="glass p-8 rounded-[3rem] w-full max-w-sm">
-        <h3 id="cfg-title" class="text-xl font-bold mb-6 text-center"></h3>
-        <div id="cfg-body" class="space-y-4 mb-8"></div>
-        <button onclick="startFinal()" class="w-full bg-cyan-600 p-4 rounded-2xl font-bold">正式開始</button>
+    <div id="cfg-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6">
+        <div class="glass p-8 rounded-[3rem] w-full max-w-sm text-center">
+            <h3 id="cfg-title" class="text-xl font-bold mb-6 text-cyan-400"></h3>
+            <div id="cfg-body" class="mb-8"></div>
+            <button onclick="sendStart()" class="w-full bg-cyan-600 p-4 rounded-2xl font-black">正式啟動</button>
+        </div>
     </div>
-</div>
 
-<script>
-    // 接收房主的選擇，彈出設定視窗
-    socket.on('open_config_ui', (mode) => {
-        const modal = document.getElementById('cfg-modal');
-        const body = document.getElementById('cfg-body');
-        const title = document.getElementById('cfg-title');
-        modal.classList.remove('hidden');
-        
-        if (mode === 'SPY') {
-            title.innerText = "誰是臥底設定";
-            body.innerHTML = `<label class="text-xs">發言秒數</label><input id="val" type="number" value="60" class="w-full bg-white/10 p-4 rounded-xl">`;
-        } else if (mode === 'BINGO') {
-            title.innerText = "Bingo 設定";
-            body.innerHTML = `<label class="text-xs">獲勝連線數</label><input id="val" type="number" value="3" class="w-full bg-white/10 p-4 rounded-xl">`;
-        } else if (mode === 'GUESS') {
-            title.innerText = "你話我猜設定";
-            body.innerHTML = `<label class="text-xs">總回合數</label><input id="val" type="number" value="3" class="w-full bg-white/10 p-4 rounded-xl">`;
+    <section id="v-play" class="view">
+        <div id="g-header" class="flex justify-between items-center mb-4"></div>
+        <div id="g-content" class="flex-1"></div>
+    </section>
+
+    <script>
+        const socket = io();
+        let myUser, myPin, selectedMode;
+        let bingoBoard = Array(25).fill(null), fillCount = 0;
+
+        // --- 房主設定流 ---
+        function openConfig(mode) {
+            selectedMode = mode;
+            const modal = document.getElementById('cfg-modal');
+            const body = document.getElementById('cfg-body');
+            const title = document.getElementById('cfg-title');
+            modal.classList.remove('hidden');
+            
+            if (mode === 'SPY') {
+                title.innerText = "誰是臥底 - 設定秒數";
+                body.innerHTML = `<input id="cfg-val" type="number" value="60" class="w-full bg-white/10 p-4 rounded-xl text-center">`;
+            } else if (mode === 'BINGO') {
+                title.innerText = "Bingo - 連線數獲勝";
+                body.innerHTML = `<input id="cfg-val" type="number" value="3" class="w-full bg-white/10 p-4 rounded-xl text-center">`;
+            } else if (mode === 'GUESS') {
+                title.innerText = "你話我猜 - 總回合數";
+                body.innerHTML = `<input id="cfg-val" type="number" value="3" class="w-full bg-white/10 p-4 rounded-xl text-center">`;
+            }
         }
-    });
 
-    function startFinal() {
-        const val = document.getElementById('val').value;
-        const mode = document.getElementById('cfg-title').innerText;
-        // 根據不同模式傳送不同的 config 物件
-        let config = {};
-        if (mode.includes("臥底")) config = { timer: val };
-        if (mode.includes("Bingo")) config = { lines: val };
-        if (mode.includes("你話我猜")) config = { rounds: val };
-        
-        socket.emit('confirm_start', config);
-        document.getElementById('cfg-modal').classList.add('hidden');
-    }
+        function sendStart() {
+            const v = document.getElementById('cfg-val').value;
+            socket.emit('confirm_start', { mode: selectedMode, val: v });
+            document.getElementById('cfg-modal').classList.add('hidden');
+        }
 
-    socket.on('game_start', (data) => {
-        go('v-play');
-        // 根據 data.type 渲染不同的遊戲畫面 (Bingo 填號碼、誰是臥底看詞語等)
-        renderGameUI(data);
-    });
-</script>
+        // --- 遊戲初始化路由 ---
+        socket.on('game_init', (data) => {
+            go('v-play');
+            if (data.type === 'SPY') initSpy(data);
+            if (data.type === 'BINGO') initBingo(data);
+            if (data.type === 'GUESS') initGuess(data);
+        });
+
+        // 1. 誰是臥底：計時與投票
+        function initSpy(data) {
+            const content = document.getElementById('g-content');
+            content.innerHTML = `
+                <div class="text-center">
+                    <h1 class="text-slate-500 text-sm">你的題目</h1>
+                    <div class="text-5xl font-black text-cyan-400 my-6">${data.word}</div>
+                    <div id="timer" class="text-3xl font-mono text-red-500 mb-8">${data.timer}s</div>
+                    <div class="grid grid-cols-2 gap-2" id="spy-votes"></div>
+                </div>`;
+            let s = data.timer;
+            const t = setInterval(() => {
+                s--; document.getElementById('timer').innerText = s + 's';
+                if (s <= 0) { clearInterval(t); alert('討論時間到！開始投票'); }
+            }, 1000);
+        }
+
+        // 2. Bingo：觸控填號
+        function initBingo(data) {
+            const content = document.getElementById('g-content');
+            content.innerHTML = `
+                <div class="text-center">
+                    <p id="b-hint" class="text-xs mb-4">點擊空格填入數字 1-25</p>
+                    <div class="grid grid-cols-5 gap-1" id="b-grid"></div>
+                </div>`;
+            const grid = document.getElementById('b-grid');
+            for(let i=0; i<25; i++) {
+                const b = document.createElement('button');
+                b.className = 'bingo-cell glass';
+                b.onclick = () => {
+                    if (bingoBoard[i]) return;
+                    fillCount++;
+                    bingoBoard[i] = fillCount;
+                    b.innerText = fillCount;
+                    b.classList.add('bingo-filled');
+                    if(fillCount === 25) { 
+                        document.getElementById('b-hint').innerText = "填寫完成！等待開號";
+                        socket.emit('bingo_ready');
+                    }
+                };
+                grid.appendChild(b);
+            }
+        }
+
+        // 3. 你話我猜：回合制畫布
+        function initGuess(data) {
+            const content = document.getElementById('g-content');
+            content.innerHTML = `
+                <div class="space-y-4">
+                    <div class="flex justify-between text-xs"><span>第 ${data.currentRound} 回合</span><span id="drawer">正在畫：載入中</span></div>
+                    <canvas id="canvas" width="350" height="400"></canvas>
+                    <input id="ans" placeholder="輸入答案..." class="w-full p-4 bg-white/10 rounded-2xl border border-white/10">
+                </div>`;
+            setupCanvas();
+        }
+
+        function setupCanvas() {
+            const cvs = document.getElementById('canvas');
+            const ctx = cvs.getContext('2d');
+            let drawing = false;
+            cvs.onmousedown = () => drawing = true;
+            cvs.onmouseup = () => drawing = false;
+            cvs.onmousemove = (e) => {
+                if(!drawing) return;
+                const rect = cvs.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                ctx.fillStyle = "black";
+                ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fill();
+                socket.emit('draw_data', {x, y});
+            };
+            socket.on('on_draw', (p) => {
+                ctx.fillStyle = "black";
+                ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+            });
+        }
+    </script>
+</body>
+</html>
