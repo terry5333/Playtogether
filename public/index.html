@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { background: #020617; color: white; }
+        body { background: #020617; color: white; overflow: hidden; }
         .view { display: none; min-height: 100vh; flex-direction: column; padding: 20px; }
         .active { display: flex; }
         .glass { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
@@ -21,21 +21,20 @@
         <div class="glass p-8 rounded-[3rem] w-full max-w-sm">
             <h3 id="cfg-title" class="text-2xl font-black mb-4 text-cyan-400">遊戲設定</h3>
             <p id="cfg-desc" class="text-sm text-slate-400 mb-6"></p>
-            <input id="cfg-input" type="number" class="w-full bg-white/10 p-4 rounded-2xl text-center mb-8 border border-white/10 text-xl outline-none focus:border-cyan-500">
-            <button onclick="launchGame()" class="w-full bg-cyan-600 p-4 rounded-2xl font-black text-lg active:scale-95 transition">確認啟動</button>
+            <input id="cfg-input" type="number" class="w-full bg-white/10 p-4 rounded-2xl text-center mb-8 border border-white/10 text-xl outline-none">
+            <button onclick="launchGame()" class="w-full bg-cyan-600 p-4 rounded-2xl font-black text-lg">正式啟動</button>
         </div>
     </div>
 
     <section id="v-room" class="view active">
-        <div class="flex justify-between items-center mb-10">
+        <div class="flex justify-between items-center mb-6">
             <h2 id="r-id" class="text-5xl font-black tracking-tighter">----</h2>
-            <div class="glass px-4 py-2 rounded-full text-xs font-bold text-cyan-400">房間進行中</div>
+            <div class="glass px-4 py-2 rounded-full text-xs font-bold text-cyan-400">等待中</div>
         </div>
-        
-        <div id="player-list" class="space-y-3 flex-1"></div>
+        <div id="player-list" class="space-y-3 flex-1 overflow-y-auto"></div>
 
-        <div id="host-controls" class="hidden mt-8">
-            <p class="text-[10px] text-slate-500 font-bold mb-4 uppercase tracking-widest text-center">房主遊戲控制</p>
+        <div id="host-controls" class="hidden mt-6">
+            <p class="text-[10px] text-slate-500 font-bold mb-4 uppercase tracking-widest text-center">遊戲選擇</p>
             <div class="grid grid-cols-2 gap-3">
                 <button onclick="socket.emit('host_setup_trigger','SPY')" class="glass p-5 rounded-3xl flex flex-col items-center gap-2">
                     <span class="text-3xl">🕵️</span><span class="text-xs font-bold">誰是臥底</span>
@@ -53,8 +52,9 @@
 
     <script>
         const socket = io();
-        let myUser, currentMode, bingoCount = 0;
+        let myUser = null, currentPendingMode = '', bingoCount = 0;
 
+        // --- 視圖切換 ---
         function go(id) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(id).classList.add('active');
@@ -62,27 +62,30 @@
 
         // --- 房主設定 ---
         socket.on('open_config_ui', (mode) => {
-            currentMode = mode;
+            currentPendingMode = mode;
             document.getElementById('cfg-modal').classList.remove('hidden');
             const input = document.getElementById('cfg-input');
             const desc = document.getElementById('cfg-desc');
-            if(mode === 'SPY') { desc.innerText = "請設定發言討論秒數"; input.value = 60; }
-            if(mode === 'BINGO') { desc.innerText = "請設定幾條連線獲勝"; input.value = 3; }
+            const title = document.getElementById('cfg-title');
+            
+            if(mode === 'SPY') { title.innerText="誰是臥底"; desc.innerText="請設定討論秒數"; input.value=60; }
+            if(mode === 'BINGO') { title.innerText="Bingo"; desc.innerText="請設定獲勝連線數"; input.value=3; }
         });
 
         function launchGame() {
             const val = document.getElementById('cfg-input').value;
-            socket.emit('start_game_final', { mode: currentMode, val: val });
+            socket.emit('start_game_final', { mode: currentPendingMode, val: val });
             document.getElementById('cfg-modal').classList.add('hidden');
         }
 
-        // --- 遊戲初始化與 Bingo 觸控 ---
+        // --- 遊戲初始化 (重點：解決黑畫面) ---
         socket.on('game_init', (data) => {
             go('v-play');
             const container = document.getElementById('game-ui');
             if(data.type === 'BINGO') {
+                bingoCount = 0;
                 container.innerHTML = `
-                    <p class="text-cyan-500 mb-6 font-bold animate-pulse">請依序觸控 1-25 號填滿</p>
+                    <p class="text-cyan-500 mb-6 font-bold animate-pulse">依序觸控 1-25 號填滿</p>
                     <div id="b-grid" class="grid grid-cols-5 gap-2 w-full max-w-sm"></div>
                 `;
                 for(let i=0; i<25; i++) {
@@ -93,10 +96,7 @@
                         bingoCount++;
                         btn.innerText = bingoCount;
                         btn.classList.add('bingo-active');
-                        if(bingoCount === 25) {
-                            alert("填號完成！等待房主開始。");
-                            socket.emit('bingo_ready');
-                        }
+                        if(bingoCount === 25) socket.emit('bingo_ready');
                     };
                     document.getElementById('b-grid').appendChild(btn);
                 }
@@ -106,22 +106,18 @@
                     <h1 class="text-6xl font-black text-cyan-400 mb-8">${data.word}</h1>
                     <div id="timer" class="text-4xl font-mono text-red-500">${data.timer}s</div>
                 `;
-                let s = data.timer;
-                const t = setInterval(() => {
-                    s--; document.getElementById('timer').innerText = s + 's';
-                    if(s <= 0) clearInterval(t);
-                }, 1000);
             }
         });
 
-        // 接收房主同步
         socket.on('room_sync', (data) => {
             document.getElementById('r-id').innerText = data.room.id;
-            // 如果是房主，顯示控制面板
+            // 判斷是否顯示房主控制台 (這行是關鍵)
             if (myUser && data.hostPin === myUser.pin) {
                 document.getElementById('host-controls').classList.remove('hidden');
             }
         });
+
+        socket.on('auth_success', (user) => { myUser = user; });
     </script>
 </body>
 </html>
