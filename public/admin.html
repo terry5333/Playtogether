@@ -1,153 +1,118 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PartyBox 完整版</title>
+    <title>PartyBox 管理員後台</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <style>.hidden { display: none !important; }</style>
+    <style>
+        body { background: #020617; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        .stat-card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(51, 65, 85, 0.5); backdrop-filter: blur(10px); }
+        .row-item:hover { background: rgba(255, 255, 255, 0.02); }
+    </style>
 </head>
-<body class="bg-slate-100 text-slate-800">
+<body class="p-8">
 
-    <section id="step-pin" class="h-screen flex items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-[2rem] shadow-xl w-full max-w-sm text-center space-y-4">
-            <h1 class="text-3xl font-black text-indigo-500 italic">PartyBox</h1>
-            <input id="input-pin" type="number" placeholder="4位PIN" class="w-full text-center text-3xl p-3 bg-slate-50 rounded-xl outline-none border-2 focus:border-indigo-400">
-            <button onclick="doCheckPin()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-xl">登入 / 註冊</button>
-        </div>
-    </section>
-
-    <section id="step-setup" class="hidden h-screen flex items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-[2rem] shadow-xl w-full max-w-sm text-center space-y-6">
-            <h2 class="font-bold">設定角色</h2>
-            <div class="flex justify-center gap-2">
-                <button onclick="setAv('🐶', this)" class="av-opt text-4xl p-2 border-4 border-indigo-500 rounded-xl">🐶</button>
-                <button onclick="setAv('🐱', this)" class="av-opt text-4xl p-2 border-4 border-transparent rounded-xl">🐱</button>
-                <button onclick="setAv('🦊', this)" class="av-opt text-4xl p-2 border-4 border-transparent rounded-xl">🦊</button>
-            </div>
-            <input id="input-name" type="text" placeholder="你的暱稱" class="w-full p-3 bg-slate-50 rounded-xl text-center font-bold">
-            <button id="btn-save" onclick="doSaveProfile()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-xl">完成</button>
-        </div>
-    </section>
-
-    <section id="step-lobby" class="hidden h-screen flex flex-col items-center justify-center p-4 space-y-6">
-        <div class="text-center">
-            <div id="show-av" class="text-6xl mb-2"></div>
-            <div id="show-name" class="text-2xl font-black text-indigo-600"></div>
-        </div>
-        <button onclick="socket.emit('create_room')" class="w-full max-w-sm p-6 bg-indigo-600 text-white rounded-3xl font-bold shadow-lg text-xl">✨ 創建房間</button>
-        <div class="w-full max-w-sm flex gap-2">
-            <input id="input-room-id" type="number" placeholder="房號" class="flex-1 p-4 bg-white rounded-2xl text-center outline-none">
-            <button onclick="doJoinRoom()" class="px-6 bg-slate-200 rounded-2xl font-bold">加入</button>
-        </div>
-    </section>
-
-    <section id="step-room" class="hidden p-6 text-center space-y-4">
-        <h2 id="room-id-tag" class="text-sm font-bold text-slate-400">房間 #----</h2>
-        <div class="grid grid-cols-1 gap-4">
-            <button onclick="askConfig('誰是臥底')" class="p-5 bg-purple-500 text-white rounded-2xl font-bold">🕵️ 誰是臥底</button>
-            <button onclick="askConfig('Bingo')" class="p-5 bg-orange-500 text-white rounded-2xl font-bold">🔢 Bingo</button>
-            <button onclick="askConfig('你話我猜')" class="p-5 bg-blue-500 text-white rounded-2xl font-bold">✍️ 你話我猜</button>
-        </div>
-    </section>
-
-    <div id="pop-config" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-6">
-        <div class="bg-white p-8 rounded-[2rem] w-full max-w-xs text-center space-y-4">
-            <h3 id="pop-title" class="font-bold"></h3>
-            <div id="pop-input-area"></div>
-            <button onclick="doStartGame()" class="w-full p-3 bg-indigo-600 text-white font-bold rounded-xl">開始遊戲</button>
+    <div id="admin-auth" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center">
+        <div class="w-80 text-center">
+            <h1 class="text-2xl font-bold mb-6 text-cyan-400">Admin Console</h1>
+            <input id="admin-pin" type="password" placeholder="管理員密鑰" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-center mb-4">
+            <button onclick="login()" class="w-full bg-cyan-600 p-4 rounded-xl font-bold">進入系統</button>
         </div>
     </div>
 
-    <section id="step-game" class="hidden p-4">
-        <div id="game-timer" class="text-center text-3xl font-mono text-red-500 mb-4"></div>
-        <div id="game-ui" class="bg-white p-6 rounded-3xl shadow-lg min-h-[200px] flex items-center justify-center text-2xl font-bold"></div>
-    </section>
+    <div class="max-w-6xl mx-auto">
+        <header class="flex justify-between items-center mb-10">
+            <div>
+                <h1 class="text-3xl font-black italic tracking-tighter">ADMIN <span class="text-cyan-500">DASHBOARD</span></h1>
+                <p class="text-slate-500 text-sm">系統狀態：<span class="text-emerald-500">運行中</span></p>
+            </div>
+            <button onclick="location.reload()" class="bg-slate-800 px-4 py-2 rounded-lg text-sm border border-slate-700">重新整理數據</button>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <div class="stat-card p-6 rounded-2xl">
+                <p class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">總註冊玩家</p>
+                <h2 id="total-users" class="text-4xl font-mono text-cyan-400">0</h2>
+            </div>
+            <div id="active-rooms-card" class="stat-card p-6 rounded-2xl border-l-4 border-l-blue-500">
+                <p class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">當前活躍房間</p>
+                <h2 id="total-rooms" class="text-4xl font-mono text-blue-400">0</h2>
+            </div>
+            <div class="stat-card p-6 rounded-2xl">
+                <p class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">伺服器延遲</p>
+                <h2 class="text-4xl font-mono text-emerald-400">12ms</h2>
+            </div>
+        </div>
+
+        <div class="stat-card rounded-2xl overflow-hidden mb-10">
+            <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+                <h3 class="font-bold">玩家名冊與積分控制</h3>
+                <input type="text" placeholder="搜尋 PIN 或 暱稱..." class="bg-slate-900 border border-slate-800 px-4 py-1 rounded-lg text-xs outline-none focus:border-cyan-500">
+            </div>
+            <table class="w-full text-left text-sm">
+                <thead class="bg-slate-900/50 text-slate-500 uppercase text-[10px] tracking-wider">
+                    <tr>
+                        <th class="p-4">PIN</th>
+                        <th class="p-4">頭像/暱稱</th>
+                        <th class="p-4 text-center">當前積分</th>
+                        <th class="p-4 text-right">管理操作</th>
+                    </tr>
+                </thead>
+                <tbody id="user-table-body">
+                    </tbody>
+            </table>
+        </div>
+    </div>
 
     <script>
         const socket = io();
-        let myUser, myPin, myAv='🐶', currentSelGame;
 
-        // 切換畫面
-        function v(id) {
-            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-            document.getElementById(id).classList.remove('hidden');
+        function login() {
+            const pin = document.getElementById('admin-pin').value;
+            socket.emit('admin_login', pin);
         }
 
-        // 1. PIN 登入
-        function doCheckPin() {
-            const el = document.getElementById('input-pin');
-            myPin = el.value; // 不要用 valueAsNumber，直接取字串最保險
-            if(myPin.length !== 4) return alert("請輸入 4 位 PIN");
-            socket.emit('check_pin', myPin);
-        }
-
-        socket.on('pin_result', res => {
-            if(res.exists) socket.emit('save_profile', res.user);
-            else v('step-setup');
+        socket.on('admin_auth_success', (data) => {
+            document.getElementById('admin-auth').classList.add('hidden');
+            renderData(data);
         });
 
-        // 2. 儲存設定
-        function setAv(av, el) {
-            myAv = av;
-            document.querySelectorAll('.av-opt').forEach(b => b.classList.replace('border-indigo-500', 'border-transparent'));
-            el.classList.replace('border-transparent', 'border-indigo-500');
+        function renderData(data) {
+            document.getElementById('total-users').innerText = data.users.length;
+            document.getElementById('total-rooms').innerText = data.rooms.length;
+
+            const table = document.getElementById('user-table-body');
+            table.innerHTML = data.users.map(u => `
+                <tr class="row-item border-b border-slate-800/50">
+                    <td class="p-4 font-mono text-cyan-500">${u.pin}</td>
+                    <td class="p-4">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xl">${u.avatar}</span>
+                            <span class="font-bold">${u.username}</span>
+                        </div>
+                    </td>
+                    <td class="p-4 text-center">
+                        <input type="number" value="${u.score}" 
+                            onchange="updateScore('${u.pin}', this.value)"
+                            class="bg-slate-900 border border-slate-700 w-20 text-center rounded py-1">
+                    </td>
+                    <td class="p-4 text-right">
+                        <button class="text-red-500 hover:underline text-xs">禁言</button>
+                        <span class="mx-2 text-slate-800">|</span>
+                        <button class="text-slate-400 hover:underline text-xs">刪除</button>
+                    </td>
+                </tr>
+            `).join('');
         }
 
-        function doSaveProfile() {
-            const name = document.getElementById('input-name').value;
-            if(!name) return alert("請輸入暱稱");
-            document.getElementById('btn-save').disabled = true;
-            socket.emit('save_profile', { pin: myPin, username: name, avatar: myAv });
+        function updateScore(pin, newScore) {
+            socket.emit('admin_update_score', { pin, newScore });
         }
 
-        socket.on('auth_success', user => {
-            myUser = user;
-            document.getElementById('show-av').innerText = user.avatar;
-            document.getElementById('show-name').innerText = user.username;
-            v('step-lobby');
+        socket.on('admin_action_done', (msg) => {
+            alert(msg);
         });
-
-        // 3. 房主自訂參數
-        function askConfig(type) {
-            currentSelGame = type;
-            document.getElementById('pop-config').classList.remove('hidden');
-            document.getElementById('pop-title').innerText = type + " 設定";
-            const area = document.getElementById('pop-input-area');
-            if(type==='誰是臥底') area.innerHTML = `<p class='text-xs'>討論秒數</p><input id='val-cfg' type='number' value='60' class='w-full p-2 bg-slate-100 rounded text-center'>`;
-            else if(type==='Bingo') area.innerHTML = `<p class='text-xs'>連線條數獲勝</p><input id='val-cfg' type='number' value='3' class='w-full p-2 bg-slate-100 rounded text-center'>`;
-            else area.innerHTML = `<p class='text-xs'>遊戲回合數</p><input id='val-cfg' type='number' value='3' class='w-full p-2 bg-slate-100 rounded text-center'>`;
-        }
-
-        function doStartGame() {
-            const val = document.getElementById('val-cfg').value;
-            document.getElementById('pop-config').classList.add('hidden');
-            socket.emit('start_game_config', { type: currentSelGame, val: val });
-        }
-
-        // 4. 遊戲內容顯示
-        socket.on('init_game', data => {
-            v('step-game');
-            const ui = document.getElementById('game-ui');
-            if(data.type === 'spy') {
-                ui.innerHTML = `<div class='text-center'><p class='text-sm text-slate-400'>你的題目</p><p class='text-4xl mt-2'>${data.word}</p></div>`;
-                let count = data.val;
-                const t = setInterval(() => {
-                    document.getElementById('game-timer').innerText = count;
-                    if(count-- <= 0) { clearInterval(t); alert("時間到！開始投票"); }
-                }, 1000);
-            } else if(data.type === 'bingo') {
-                ui.innerHTML = "請在紙上填寫號碼，輪流喊號！";
-                document.getElementById('game-timer').innerText = "目標: " + data.val + " 條線";
-            } else {
-                ui.innerHTML = "遊戲開始！(請由房主出題)";
-            }
-        });
-
-        socket.on('room_created', rid => socket.emit('join_room', { roomId: rid, user: myUser }));
-        function doJoinRoom() { socket.emit('join_room', { roomId: document.getElementById('input-room-id').value, user: myUser }); }
-        socket.on('room_update', r => { v('step-room'); document.getElementById('room-id-tag').innerText = "房間 #" + r.id; });
     </script>
 </body>
 </html>
