@@ -7,62 +7,55 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-let memoryDB = {}; 
-let rooms = {};
+let memoryDB = {}; // { pin: { username, avatar, score } }
+let rooms = {};    // { rid: { hostId, players: [] } }
 
 io.on('connection', (socket) => {
-    // 登入與個人資料
-    socket.on('save_profile', (data) => {
-        memoryDB[data.pin] = { ...data, score: memoryDB[data.pin]?.score || 0 };
-        socket.emit('auth_success', memoryDB[data.pin]);
+    // 檢查 PIN 碼
+    socket.on('check_pin', (pin) => {
+        const user = memoryDB[pin];
+        socket.emit('pin_result', { exists: !!user, user: user });
     });
 
-    // 建立房間
+    // 儲存/註冊個人檔案
+    socket.on('save_profile', (data) => {
+        memoryDB[data.pin] = { 
+            ...data, 
+            score: memoryDB[data.pin]?.score || 0 
+        };
+        socket.emit('auth_success', memoryDB[data.pin]);
+        io.emit('rank_update', Object.values(memoryDB).sort((a,b)=>b.score-a.score).slice(0,5));
+    });
+
+    // 建立房間 (發起者成為 Admin)
     socket.on('create_room', () => {
         const rid = Math.floor(1000 + Math.random() * 9000).toString();
-        rooms[rid] = { id: rid, players: [], host: socket.id, messages: [] };
+        rooms[rid] = { id: rid, hostId: socket.id, players: [] };
         socket.emit('room_created', rid);
     });
 
-    // 加入房間
+    // 加入房間與同步
     socket.on('join_room', (data) => {
         const rid = data.roomId;
         if (rooms[rid]) {
             socket.join(rid);
             socket.roomId = rid;
-            socket.user = data.user;
-            
             if (!rooms[rid].players.find(p => p.pin === data.user.pin)) {
-                rooms[rid].players.push({ ...data.user, socketId: socket.id });
+                rooms[rid].players.push(data.user);
             }
-            
-            io.to(rid).emit('room_data', {
+            // 告知前端誰是 Admin
+            io.to(rid).emit('room_update', {
                 room: rooms[rid],
-                isHost: rooms[rid].host === socket.id
+                isAdmin: rooms[rid].hostId === socket.id
             });
         }
     });
 
-    // 聊天功能
-    socket.on('send_msg', (msg) => {
-        const rid = socket.roomId;
-        if (rid && rooms[rid]) {
-            const chatObj = { user: socket.user.username, text: msg, avatar: socket.user.avatar };
-            rooms[rid].messages.push(chatObj);
-            io.to(rid).emit('new_msg', chatObj);
-        }
-    });
-
-    // 遊戲啟動同步
+    // 遊戲啟動 (僅 Admin 可觸發)
     socket.on('start_game', (type) => {
-        const rid = socket.roomId;
-        if (rooms[rid] && rooms[rid].host === socket.id) {
-            io.to(rid).emit('goto_game', type);
+        if (rooms[socket.roomId]?.hostId === socket.id) {
+            io.to(socket.roomId).emit('goto_game', type);
         }
-    });
-
-    socket.on('disconnect', () => {
-        // 離線處理可在此擴充
     });
 });
 
