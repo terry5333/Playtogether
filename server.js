@@ -8,65 +8,78 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// 1. 修復 Admin 路徑：確保輸入 /admin 能看到頁面
+// 1. 修復 Admin 進入點：輸入 /admin 即可訪問
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 let memoryDB = {}; 
 let rooms = {};
-
-// 遊戲題庫
-const library = {
-    spy: [['西瓜', '哈密瓜'], ['牙刷', '牙膏'], ['老師', '教授'], ['外送', '快遞']],
-    guess: ['珍珠奶茶', '台北101', '周杰倫', '臭豆腐', '蜘蛛人', '游泳']
-};
+const spyWords = [['蘋果', '梨子'], ['醫生', '護士'], ['火鍋', '燒烤'], ['珍珠奶茶', '絲襪奶茶']];
 
 io.on('connection', (socket) => {
-    // ... 基礎 PIN 檢查與登入邏輯 (保持之前代碼) ...
+    // 基礎登入邏輯
+    socket.on('check_pin', (pin) => {
+        const u = memoryDB[pin];
+        socket.emit('pin_result', { exists: !!u, user: u });
+    });
 
-    // 2. 房主選擇遊戲後，先進入「設定參數階段」
-    socket.on('select_mode', (mode) => {
-        const r = rooms[socket.roomId];
-        if (r && r.hostPin === socket.userPin) {
-            r.pendingMode = mode;
-            io.to(socket.roomId).emit('open_config_ui', mode);
+    socket.on('save_profile', (data) => {
+        memoryDB[data.pin] = { ...data, score: memoryDB[data.pin]?.score || 0 };
+        socket.emit('auth_success', memoryDB[data.pin]);
+    });
+
+    // 建立/加入房間 (使用 PIN 鎖定 Host)
+    socket.on('create_room', (user) => {
+        const rid = Math.floor(1000 + Math.random() * 9000).toString();
+        rooms[rid] = { id: rid, hostPin: user.pin, players: [], status: 'LOBBY' };
+        socket.emit('room_created', rid);
+    });
+
+    socket.on('join_room', (data) => {
+        const r = rooms[data.roomId];
+        if (r) {
+            socket.join(data.roomId);
+            socket.roomId = data.roomId;
+            socket.userPin = data.user.pin;
+            if (!r.players.find(p => p.pin === data.user.pin)) r.players.push({...data.user, socketId: socket.id});
+            io.to(data.roomId).emit('room_sync', { room: r, hostPin: r.hostPin });
         }
     });
 
-    // 3. 房主確認設定，正式啟動遊戲
-    socket.on('confirm_start', (config) => {
+    // --- 遊戲啟動流程 (設定頁跳轉) ---
+    socket.on('confirm_start', (data) => {
         const r = rooms[socket.roomId];
-        if (!r) return;
-        
-        r.config = config;
-        const mode = r.pendingMode;
+        if (!r || r.hostPin !== socket.userPin) return;
 
-        if (mode === 'SPY') {
-            const pair = library.spy[Math.floor(Math.random() * library.spy.length)];
+        if (data.mode === 'SPY') {
+            const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
             const spyIdx = Math.floor(Math.random() * r.players.length);
             r.players.forEach((p, i) => {
-                const isSpy = (i === spyIdx);
-                io.to(p.socketId).emit('game_start', {
-                    type: 'SPY',
-                    word: isSpy ? pair[1] : pair[0],
-                    role: isSpy ? '臥底' : '平民',
-                    timer: config.timer
+                io.to(p.socketId).emit('game_init', { 
+                    type: 'SPY', timer: data.val, role: (i===spyIdx?'臥底':'平民'), word: (i===spyIdx?pair[1]:pair[0]) 
                 });
             });
         } 
-        else if (mode === 'BINGO') {
-            io.to(socket.roomId).emit('game_start', { type: 'BINGO', targetLines: config.lines });
+        else if (data.mode === 'BINGO') {
+            io.to(socket.roomId).emit('game_init', { type: 'BINGO', targetLines: data.val });
         }
-        else if (mode === 'GUESS') {
-            io.to(socket.roomId).emit('game_start', { type: 'GUESS', rounds: config.rounds, drawerIdx: 0 });
+        else if (data.mode === 'GUESS') {
+            io.to(socket.roomId).emit('game_init', { type: 'GUESS', totalRounds: data.val, currentRound: 1 });
         }
     });
 
-    // --- 管理員後台 API ---
-    socket.on('admin_login', (pin) => {
-        if(pin === "9999") socket.emit('admin_auth_success', Object.values(rooms));
+    // 遊戲中即時同步 (畫布、投票、喊號)
+    socket.on('draw_data', (pos) => socket.to(socket.roomId).emit('on_draw', pos));
+    socket.on('bingo_call', (num) => io.to(socket.roomId).emit('on_bingo_call', num));
+    
+    // 結算與加分
+    socket.on('game_win', (points) => {
+        if (memoryDB[socket.userPin]) {
+            memoryDB[socket.userPin].score += points;
+            io.emit('rank_update', Object.values(memoryDB).sort((a,b)=>b.score-a.score).slice(0,5));
+        }
     });
 });
 
-server.listen(3000, () => console.log('Server running on http://localhost:3000'));
+server.listen(3000);
