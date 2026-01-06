@@ -143,3 +143,51 @@
     </script>
 </body>
 </html>
+function saveProfile() {
+    const name = document.getElementById('name-in').value.trim();
+    if (!name) return alert("暱稱不能為空！");
+
+    const btn = document.getElementById('save-btn');
+    
+    // 1. 進入儲存狀態
+    btn.disabled = true;
+    btn.innerText = "儲存中...";
+    btn.classList.add('opacity-50', 'cursor-not-allowed');
+
+    // 2. 設定一個 5 秒的「保險絲」，防止伺服器沒回應導致死當
+    const timeout = setTimeout(() => {
+        if (btn.disabled) {
+            btn.disabled = false;
+            btn.innerText = "重試一次";
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            alert("伺服器回應超時，請檢查網路後重試！");
+        }
+    }, 5000);
+
+    // 3. 發送請求
+    socket.emit('save_profile', {
+        pin: myPin, // 確保你在 check_pin 階段有存下 myPin
+        username: name,
+        avatar: myAv
+    });
+
+    // 4. 當後端回傳成功時，清除保險絲
+    socket.once('auth_success', (user) => {
+        clearTimeout(timeout);
+        btn.disabled = false;
+        btn.innerText = "儲存完成！";
+        
+        // 執行跳轉大廳的邏輯
+        myUser = user;
+        document.getElementById('display-name').innerText = user.username;
+        v('view-lobby'); // 跳轉畫面
+    });
+
+    // 5. 監聽可能的錯誤回傳
+    socket.once('save_error', (msg) => {
+        clearTimeout(timeout);
+        btn.disabled = false;
+        btn.innerText = "完成並進入";
+        alert(msg);
+    });
+}
