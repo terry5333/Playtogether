@@ -1,17 +1,44 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PartyBox Admin</title>
+    <title>PartyBox 上帝視角</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body class="bg-slate-950 text-white p-10">
-    <h1 class="text-3xl font-black mb-10 text-cyan-500 italic">ADMIN 控制台</h1>
-    <div class="grid grid-cols-2 gap-4 max-w-md">
-        <button onclick="parent.openGameConfig('SPY')" class="bg-slate-800 p-6 rounded-2xl border border-white/10 hover:border-cyan-500 transition">誰是臥底</button>
-        <button onclick="parent.openGameConfig('BINGO')" class="bg-slate-800 p-6 rounded-2xl border border-white/10 hover:border-cyan-500 transition">Bingo</button>
-        <button onclick="parent.openGameConfig('GUESS')" class="bg-slate-800 p-6 rounded-2xl border border-white/10 hover:border-cyan-500 transition">你話我猜</button>
-        <button onclick="parent.openGameConfig('MEMORY')" class="bg-slate-800 p-6 rounded-2xl border border-white/10 hover:border-cyan-500 transition">記憶翻牌</button>
+    <div class="flex justify-between items-center mb-10">
+        <h1 class="text-2xl font-black text-cyan-500 italic">SYSTEM MONITOR</h1>
+        <input id="pw" type="password" placeholder="密碼 9999" onchange="refresh()" class="bg-slate-900 border border-slate-700 p-2 rounded-xl">
     </div>
+
+    <div class="grid grid-cols-2 gap-10">
+        <div class="bg-slate-900 p-6 rounded-3xl">
+            <h3 class="mb-4 font-bold text-slate-500">活躍房間</h3>
+            <div id="admin-rooms" class="space-y-2"></div>
+        </div>
+        <div class="bg-slate-900 p-6 rounded-3xl">
+            <h3 class="mb-4 font-bold text-slate-500">玩家個資/積分管理</h3>
+            <div id="admin-users" class="space-y-2"></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        function refresh() { socket.emit('admin_login', document.getElementById('pw').value); }
+        socket.on('admin_data', data => {
+            document.getElementById('admin-rooms').innerHTML = data.rooms.map(r => `
+                <div class="flex justify-between p-4 bg-white/5 rounded-2xl">
+                    <span>#${r.id} (人數: ${r.players.length})</span>
+                    <button onclick="socket.emit('admin_kick_room','${r.id}')" class="text-red-500 text-xs">強制解散</button>
+                </div>`).join('');
+            document.getElementById('admin-users').innerHTML = data.users.map(u => `
+                <div class="flex justify-between items-center p-4 bg-white/5 rounded-2xl">
+                    <span>${u.username} (${u.pin})</span>
+                    <input type="number" value="${u.score}" onchange="update('${u.pin}', this.value, '${u.username}')" class="w-16 bg-transparent text-center border-b border-cyan-500">
+                </div>`).join('');
+        });
+        function update(pin, s, n) { socket.emit('admin_update_user', {pin, score:s, username:n}); }
+        setInterval(refresh, 3000);
+    </script>
 </body>
 </html>
