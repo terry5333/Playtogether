@@ -79,3 +79,29 @@ function updateAdmin() {
     });
 }
 server.listen(3000);
+// 確保後端邏輯是這樣的：
+socket.on('save_profile', (data) => {
+    console.log("正在儲存玩家:", data.pin);
+    
+    // 使用 $set 避免覆蓋掉舊有的 score
+    const updateData = { 
+        username: data.username, 
+        avatar: data.avatar, 
+        pin: data.pin 
+    };
+
+    // upsert: true 代表沒有就新增，有就更新
+    db.update({ pin: data.pin }, { $set: updateData }, { upsert: true }, (err) => {
+        if (err) {
+            console.error("資料庫寫入失敗:", err);
+            return socket.emit('save_error', '儲存失敗，請再試一次');
+        }
+        
+        // 寫入成功後，重新讀取一次資料確保正確性
+        db.findOne({ pin: data.pin }, (err, user) => {
+            console.log("儲存成功，發送驗證回傳");
+            socket.emit('auth_success', user);
+            // 如果你有廣播給 Admin 的邏輯，放在這裡
+        });
+    });
+});
