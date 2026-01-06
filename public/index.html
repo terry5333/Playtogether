@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -7,181 +7,102 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        :root { --sand: #F2EBE1; --blue: #A2C2D8; }
-        body { background: var(--sand); font-family: sans-serif; color: #5D6D7E; }
-        .card { background: white; border-radius: 2.5rem; box-shadow: 0 10px 40px rgba(0,0,0,0.03); }
-        .btn { border-radius: 1.25rem; font-weight: bold; transition: 0.2s; cursor: pointer; border:none; }
-        .btn:active { transform: scale(0.95); }
         .hidden { display: none !important; }
-        .mem-card { height: 80px; background: #e2e8f0; border-radius: 1rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; cursor: pointer; transition: 0.3s; }
-        .mem-card.flipped { background: white; transform: rotateY(180deg); }
-        .mem-card.matched { background: #d1fae5; color: #059669; cursor: default; }
+        .card { border-radius: 2rem; background: white; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .mem-card { height: 70px; background: #f1f5f9; border-radius: 1rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; cursor: pointer; }
+        .mem-card.flipped { background: white; border: 2px solid #e2e8f0; }
+        .mem-card.matched { background: #dcfce7; opacity: 0.6; cursor: default; }
     </style>
 </head>
-<body class="flex items-center justify-center min-h-screen p-4">
-    <div id="toast" class="fixed top-8 bg-black/80 text-white px-8 py-3 rounded-full opacity-0 transition-all z-[999]"></div>
+<body class="bg-[#F2EBE1] min-h-screen flex items-center justify-center p-4">
+    <div id="toast" class="fixed top-5 bg-black/80 text-white px-6 py-2 rounded-full opacity-0 transition-all z-50 pointer-events-none"></div>
 
-    <section id="view-auth" class="card p-10 w-full max-w-md space-y-6 text-center">
-        <h1 class="text-4xl font-black text-[#A2C2D8]">PartyBox</h1>
-        <div class="flex justify-center gap-2" id="avatar-list">
+    <section id="view-auth" class="card p-10 w-full max-w-sm space-y-6 text-center">
+        <h1 class="text-4xl font-black text-blue-300">PartyBox</h1>
+        <div class="flex justify-center gap-2" id="avatars">
             <button onclick="selAv('🐶')" class="text-2xl p-2 border-2 rounded-xl border-blue-400">🐶</button>
             <button onclick="selAv('🐱')" class="text-2xl p-2 border-2 rounded-xl">🐱</button>
             <button onclick="selAv('🦊')" class="text-2xl p-2 border-2 rounded-xl">🦊</button>
-            <button onclick="selAv('🐰')" class="text-2xl p-2 border-2 rounded-xl">🐰</button>
         </div>
-        <input id="auth-u" type="text" placeholder="帳號" class="w-full p-4 bg-gray-100 rounded-2xl outline-none">
-        <input id="auth-p" type="password" placeholder="密碼" class="w-full p-4 bg-gray-100 rounded-2xl outline-none">
-        <div class="flex gap-2">
-            <button onclick="doAuth('login')" class="flex-1 p-4 btn bg-[#A2C2D8] text-white">登入</button>
-            <button onclick="doAuth('register')" class="flex-1 p-4 btn bg-gray-200">註冊</button>
-        </div>
+        <input id="u" type="text" placeholder="帳號" class="w-full p-4 bg-gray-100 rounded-2xl outline-none">
+        <input id="p" type="password" placeholder="密碼" class="w-full p-4 bg-gray-100 rounded-2xl outline-none">
+        <button onclick="auth()" class="w-full p-4 bg-blue-300 text-white font-bold rounded-2xl">進入派對</button>
     </section>
 
-    <section id="view-lobby" class="hidden card p-8 w-full max-w-md space-y-6 text-center">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <span id="my-av" class="text-3xl">🐶</span>
-                <span id="my-name" class="font-bold text-lg">---</span>
-            </div>
-            <span id="my-score" class="bg-yellow-100 text-yellow-600 px-3 py-1 rounded-full text-xs font-bold">0 pt</span>
+    <section id="view-lobby" class="hidden card p-8 w-full max-w-sm space-y-6">
+        <div class="flex justify-between items-center bg-blue-50 p-4 rounded-3xl">
+            <span id="my-info" class="font-bold text-blue-600">🐶 Name</span>
+            <span id="my-score" class="bg-blue-400 text-white px-3 py-1 rounded-full text-xs font-bold">0 pt</span>
         </div>
-        
-        <div id="leaderboard" class="bg-gray-50 p-4 rounded-3xl text-left">
-            <h4 class="text-xs font-bold text-gray-400 uppercase mb-2">🏆 全服高分排行</h4>
-            <div id="leader-list" class="space-y-1 text-sm"></div>
+        <div class="bg-gray-50 p-4 rounded-3xl text-sm">
+            <h4 class="font-bold text-gray-400 mb-2">🏆 排行榜</h4>
+            <div id="leaders" class="space-y-1"></div>
         </div>
-
-        <div id="room-actions" class="space-y-3">
-            <button onclick="socket.emit('create_room')" class="w-full p-4 btn bg-blue-400 text-white">建立新遊戲</button>
+        <div id="actions" class="space-y-2">
+            <button onclick="socket.emit('create_room')" class="w-full p-4 bg-blue-400 text-white rounded-2xl font-bold">創建房間</button>
             <div class="flex gap-2">
-                <input id="room-id" type="number" placeholder="輸入房號" class="w-2/3 p-4 bg-gray-100 rounded-2xl outline-none">
-                <button onclick="join()" class="w-1/3 btn bg-gray-200">加入</button>
+                <input id="rid" type="number" placeholder="房號" class="w-2/3 p-4 bg-gray-100 rounded-2xl outline-none">
+                <button onclick="join()" class="w-1/3 bg-gray-200 rounded-2xl font-bold">加入</button>
             </div>
         </div>
-
-        <div id="room-wait" class="hidden space-y-4">
-            <h2 id="disp-rid" class="text-4xl font-black">----</h2>
-            <div id="player-list" class="flex flex-wrap gap-2 justify-center"></div>
-            <div id="host-zone" class="hidden border-t pt-4 space-y-2">
-                <button onclick="socket.emit('host_setup_game',{type:'memory'})" class="w-full p-4 btn bg-blue-100 text-blue-500">🧠 記憶卡牌</button>
-                <button onclick="socket.emit('host_setup_game',{type:'bingo'})" class="w-full p-4 btn bg-green-100 text-green-500">🎲 數字賓果</button>
-                <button onclick="socket.emit('host_setup_game',{type:'draw'})" class="w-full p-4 btn bg-orange-100 text-orange-500">🎨 你話我猜</button>
+        <div id="wait" class="hidden text-center space-y-4">
+            <h2 id="room-num" class="text-5xl font-black">----</h2>
+            <div id="players" class="flex flex-wrap gap-2 justify-center"></div>
+            <div id="host-zone" class="hidden pt-4 border-t space-y-2">
+                <button onclick="socket.emit('host_setup_game',{type:'memory'})" class="w-full p-4 bg-blue-100 text-blue-500 rounded-2xl font-bold">🧠 記憶卡牌</button>
             </div>
         </div>
     </section>
 
     <section id="view-memory" class="hidden card p-6 w-full max-w-md text-center">
-        <h2 class="text-xl font-black mb-4">記憶卡牌 🧠</h2>
-        <div id="memory-grid" class="grid grid-cols-4 gap-2"></div>
+        <div id="mem-grid" class="grid grid-cols-4 gap-2"></div>
     </section>
 
     <script>
         const socket = io();
-        let myUser = null, selAvatar = '🐶';
+        let myUser = null, avatar = '🐶';
 
         function v(id) { document.querySelectorAll('section').forEach(s => s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
-        function showT(m) { const t = document.getElementById('toast'); t.innerText = m; t.style.opacity = 1; setTimeout(()=>t.style.opacity=0, 2000); }
-        function selAv(a) { 
-            selAvatar = a;
-            document.querySelectorAll('#avatar-list button').forEach(b => b.classList.remove('border-blue-400'));
-            event.target.classList.add('border-blue-400');
-        }
-
-        // 登入註冊
-        function doAuth(type) {
-            const username = document.getElementById('auth-u').value;
-            const password = document.getElementById('auth-p').value;
-            if(!username || !password) return alert("請填寫帳密");
-            socket.emit('auth_action', { type, username, password, avatar: selAvatar });
-        }
-
-        socket.on('auth_success', user => {
-            myUser = user;
-            document.getElementById('my-av').innerText = user.avatar;
-            document.getElementById('my-name').innerText = user.username;
-            document.getElementById('my-score').innerText = user.score + " pt";
-            v('view-lobby');
+        function selAv(a) { avatar = a; document.querySelectorAll('#avatars button').forEach(b => b.classList.remove('border-blue-400')); event.target.classList.add('border-blue-400'); }
+        function auth() { socket.emit('auth_action', { type: 'register', username: u.value, password: p.value, avatar }); }
+        
+        socket.on('auth_success', user => { 
+            myUser = user; 
+            document.getElementById('my-info').innerText = `${user.avatar} ${user.username}`;
+            v('view-lobby'); 
         });
 
         socket.on('leaderboard_update', list => {
-            document.getElementById('leader-list').innerHTML = list.map((u, i) => `
-                <div class="flex justify-between">
-                    <span>${i+1}. ${u.avatar} ${u.username}</span>
-                    <span class="font-bold">${u.score}</span>
-                </div>
-            `).join('');
-            if(myUser) {
-                const me = list.find(u => u.username === myUser.username);
-                if(me) document.getElementById('my-score').innerText = me.score + " pt";
-            }
+            document.getElementById('leaders').innerHTML = list.map((u, i) => `<div>${i+1}. ${u.avatar} ${u.username} - ${u.score}</div>`).join('');
+            const me = list.find(u => u.username === myUser?.username);
+            if(me) document.getElementById('my-score').innerText = me.score + " pt";
         });
 
-        // 房間邏輯
-        function join() {
-            const rid = document.getElementById('room-id').value;
-            if(rid) socket.emit('join_room', { roomId: rid, user: myUser });
-        }
-
+        function join() { socket.emit('join_room', { roomId: rid.value, user: myUser }); }
         socket.on('room_created', d => socket.emit('join_room', { roomId: d.roomId, user: myUser }));
         socket.on('room_update', d => {
-            v('view-lobby');
-            document.getElementById('room-actions').classList.add('hidden');
-            document.getElementById('room-wait').classList.remove('hidden');
-            document.getElementById('disp-rid').innerText = d.roomId;
+            v('view-lobby'); document.getElementById('actions').classList.add('hidden'); document.getElementById('wait').classList.remove('hidden');
+            document.getElementById('room-num').innerText = d.roomId;
             document.getElementById('host-zone').classList.toggle('hidden', socket.id !== d.hostId);
-            document.getElementById('player-list').innerHTML = d.players.map(p => `
-                <div class="flex flex-col items-center p-2 bg-gray-50 rounded-2xl w-20">
-                    <span class="text-2xl">${p.avatar}</span>
-                    <span class="text-[10px] font-bold truncate w-full text-center">${p.username}</span>
-                </div>
-            `).join('');
+            document.getElementById('players').innerHTML = d.players.map(p => `<div>${p.avatar}</div>`).join('');
         });
 
-        // 記憶卡牌前端
         socket.on('game_begin', d => {
             if(d.type === 'memory') {
-                v('view-memory');
-                const grid = document.getElementById('memory-grid');
-                grid.innerHTML = '';
+                v('view-memory'); const g = document.getElementById('mem-grid'); g.innerHTML = '';
                 for(let i=0; i<d.cardCount; i++) {
-                    const card = document.createElement('div');
-                    card.className = "mem-card";
-                    card.dataset.idx = i;
-                    card.onclick = () => socket.emit('memory_flip', i);
-                    grid.appendChild(card);
+                    const c = document.createElement('div'); c.className = "mem-card"; 
+                    c.onclick = () => socket.emit('memory_flip', i); c.dataset.idx = i; g.appendChild(c);
                 }
             }
         });
 
-        socket.on('memory_sync_flip', flipped => {
-            flipped.forEach(f => {
-                const el = document.querySelector(`[data-idx="${f.idx}"]`);
-                el.innerText = f.val;
-                el.classList.add('flipped');
-            });
-        });
-
-        socket.on('memory_flip_back', () => {
-            document.querySelectorAll('.mem-card:not(.matched)').forEach(el => {
-                el.innerText = '';
-                el.classList.remove('flipped');
-            });
-        });
-
-        socket.on('memory_match_success', matched => {
-            matched.forEach(idx => {
-                const el = document.querySelector(`[data-idx="${idx}"]`);
-                el.classList.add('matched');
-                el.onclick = null;
-            });
-        });
-
-        socket.on('game_over', d => {
-            alert(`🎊 遊戲結束！贏家是 ${d.winner}`);
-            v('view-lobby'); // 返回房間畫面
-        });
-
-        socket.on('toast', m => showT(m));
+        socket.on('memory_sync_flip', f => f.forEach(x => { const e = document.querySelector(`[data-idx="${x.idx}"]`); e.innerText = x.val; e.classList.add('flipped'); }));
+        socket.on('memory_flip_back', () => document.querySelectorAll('.mem-card:not(.matched)').forEach(e => { e.innerText = ''; e.classList.remove('flipped'); }));
+        socket.on('memory_match_success', m => m.forEach(i => document.querySelector(`[data-idx="${i}"]`).classList.add('matched')));
+        socket.on('game_over', d => { alert("贏家是 " + d.winner); v('view-lobby'); });
+        socket.on('force_leave', () => location.reload());
+        socket.on('toast', m => { const t = document.getElementById('toast'); t.innerText = m; t.style.opacity = 1; setTimeout(() => t.style.opacity = 0, 2000); });
     </script>
 </body>
 </html>
