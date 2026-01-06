@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -7,101 +7,82 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { background: #020617; color: white; font-family: sans-serif; }
+        body { background: #020617; color: white; }
         .view { display: none; min-height: 100vh; flex-direction: column; padding: 20px; }
         .active { display: flex; }
-        .glass { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
-        .bingo-cell { aspect-ratio: 1; border: 1px solid #334155; border-radius: 8px; font-size: 20px; transition: 0.2s; }
-        .bingo-filled { background: #0891b2; border-color: #22d3ee; box-shadow: 0 0 15px #0891b2; }
+        .glass { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
+        .bingo-cell { aspect-ratio: 1; border: 1px solid #334155; border-radius: 8px; font-weight: bold; }
+        .bingo-active { background: #0891b2; border-color: #22d3ee; }
     </style>
 </head>
 <body>
 
-    <div id="cfg-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6">
+    <div id="cfg-modal" class="hidden fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-6">
         <div class="glass p-8 rounded-[3rem] w-full max-w-sm text-center">
-            <h3 id="cfg-title" class="text-xl font-bold mb-6 text-cyan-400"></h3>
-            <div id="cfg-body" class="mb-8 text-slate-400 text-sm"></div>
-            <input id="cfg-input" type="number" class="w-full bg-white/10 p-4 rounded-2xl text-center mb-8 outline-none border border-white/10 focus:border-cyan-500">
-            <button onclick="commitStart()" class="w-full bg-cyan-600 p-4 rounded-2xl font-black active:scale-95 transition">確認開始</button>
+            <h3 id="cfg-title" class="text-xl font-bold mb-4 text-cyan-400">遊戲設定</h3>
+            <p id="cfg-desc" class="text-xs text-slate-400 mb-6"></p>
+            <input id="cfg-input" type="number" class="w-full bg-white/10 p-4 rounded-2xl text-center mb-8 border border-white/10">
+            <button onclick="launchGame()" class="w-full bg-cyan-600 p-4 rounded-2xl font-black">正式開始</button>
         </div>
     </div>
 
+    <section id="v-room" class="view">
+        <h2 id="r-id" class="text-4xl font-black mb-8">----</h2>
+        <div id="player-list" class="space-y-2 flex-1"></div>
+        
+        <div id="host-controls" class="hidden grid grid-cols-2 gap-2 mt-6">
+            <button onclick="socket.emit('host_setup_trigger','SPY')" class="glass p-4 rounded-2xl">🕵️ 誰是臥底</button>
+            <button onclick="socket.emit('host_setup_trigger','BINGO')" class="glass p-4 rounded-2xl">🔢 Bingo</button>
+        </div>
+    </section>
+
     <section id="v-play" class="view">
-        <div id="game-ui" class="flex-1 flex flex-col"></div>
+        <div id="game-container" class="flex-1 flex flex-col"></div>
     </section>
 
     <script>
         const socket = io();
-        let myUser, curMode, bingoBoard = Array(25).fill(null), fillIdx = 0;
+        let myUser, currentMode, bingoCount = 0;
 
-        function go(id) {
-            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-        }
-
-        // --- 房主啟動邏輯 ---
-        function openGameConfig(mode) {
-            curMode = mode;
-            const modal = document.getElementById('cfg-modal');
-            const title = document.getElementById('cfg-title');
-            const body = document.getElementById('cfg-body');
+        // --- 房主設定流 ---
+        socket.on('open_config_ui', (mode) => {
+            currentMode = mode;
+            document.getElementById('cfg-modal').classList.remove('hidden');
             const input = document.getElementById('cfg-input');
-            
-            modal.classList.remove('hidden');
-            if(mode === 'SPY') { title.innerText = "誰是臥底"; body.innerText = "請輸入討論秒數"; input.value = 60; }
-            if(mode === 'BINGO') { title.innerText = "Bingo"; body.innerText = "請輸入獲勝連線數"; input.value = 3; }
-            if(mode === 'GUESS') { title.innerText = "你話我猜"; body.innerText = "請輸入總回合數"; input.value = 3; }
-        }
+            const desc = document.getElementById('cfg-desc');
+            if(mode === 'SPY') { desc.innerText="設定發言討論秒數"; input.value=60; }
+            if(mode === 'BINGO') { desc.innerText="設定獲勝連線數"; input.value=3; }
+        });
 
-        function commitStart() {
+        function launchGame() {
             const val = document.getElementById('cfg-input').value;
-            socket.emit('confirm_start', { mode: curMode, val: val });
+            socket.emit('start_game_final', { mode: currentMode, val: val });
             document.getElementById('cfg-modal').classList.add('hidden');
         }
 
-        // --- 遊戲初始化路由 ---
+        // --- Bingo 觸控填號邏輯 ---
         socket.on('game_init', (data) => {
-            go('v-play');
-            const container = document.getElementById('game-ui');
-            
-            if (data.type === 'SPY') {
-                container.innerHTML = `
-                    <div class="text-center py-10">
-                        <p class="text-slate-500 mb-2">你的題目</p>
-                        <h1 class="text-5xl font-black text-cyan-400 mb-8">${data.word}</h1>
-                        <div id="timer" class="text-4xl font-mono text-red-500">${data.timer}s</div>
-                    </div>`;
-                let s = data.timer;
-                const t = setInterval(() => {
-                    s--; document.getElementById('timer').innerText = s + 's';
-                    if(s <= 0) clearInterval(t);
-                }, 1000);
-            }
+            document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+            document.getElementById('v-play').classList.add('active');
+            const container = document.getElementById('game-container');
 
-            if (data.type === 'BINGO') {
-                container.innerHTML = `
-                    <div class="text-center">
-                        <p id="b-hint" class="text-cyan-500 mb-4 animate-pulse">請依序點擊格子填入 1-25</p>
-                        <div id="bingo-grid" class="grid grid-cols-5 gap-2"></div>
-                    </div>`;
-                const grid = document.getElementById('bingo-grid');
+            if(data.type === 'BINGO') {
+                container.innerHTML = `<p class="text-center text-cyan-500 mb-4 animate-pulse">請依序點擊格子填入 1-25</p>
+                                       <div id="b-grid" class="grid grid-cols-5 gap-2"></div>`;
                 for(let i=0; i<25; i++) {
                     const btn = document.createElement('button');
                     btn.className = 'bingo-cell glass';
                     btn.onclick = () => {
-                        if(bingoBoard[i]) return;
-                        fillIdx++;
-                        bingoBoard[i] = fillIdx;
-                        btn.innerText = fillIdx;
-                        btn.classList.add('bingo-filled');
-                        if(fillIdx === 25) document.getElementById('b-hint').innerText = "填寫完成，等待開號！";
+                        if(btn.innerText) return;
+                        bingoCount++;
+                        btn.innerText = bingoCount;
+                        btn.classList.add('bingo-active');
                     };
-                    grid.appendChild(btn);
+                    document.getElementById('b-grid').appendChild(btn);
                 }
             }
+            // 誰是臥底邏輯...
         });
-
-        // 更多遊戲邏輯可以在此擴展...
     </script>
 </body>
 </html>
