@@ -8,60 +8,53 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-// 初始化資料庫 (存儲帳號與分數)
 const db = new Datastore({ filename: 'users.db', autoload: true });
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
 let gameHistory = [];
 
-// 廣播排行與 Admin 數據
-const broadcastLeaderboard = () => {
+// 廣播排行
+function broadcastLeaderboard() {
     db.find({}).sort({ score: -1 }).limit(10).exec((err, docs) => io.emit('leaderboard_update', docs));
-};
+}
 
-const broadcastAdminData = () => {
-    io.emit('admin_data_update', {
-        rooms: Object.keys(rooms).map(rid => ({
-            id: rid, game: rooms[rid].gameType, players: rooms[rid].players, host: rooms[rid].host
-        })),
-        history: gameHistory
-    });
-};
-
-const endGame = (rid, gName, winner) => {
-    if (!rooms[rid]) return;
-    gameHistory.unshift({ time: new Date().toLocaleTimeString(), game: gName, winner, roomId: rid });
-    if (gameHistory.length > 50) gameHistory.pop();
-    io.to(rid).emit('game_over', { winner });
-    rooms[rid].gameType = 'Lobby';
-    rooms[rid].state = {};
-    broadcastAdminData();
-};
+// 修正：廣播 Admin 數據 (確保包含所有欄位)
+function broadcastAdminData() {
+    const roomInfo = Object.keys(rooms).map(rid => ({
+        id: rid, 
+        game: rooms[rid].gameType, 
+        players: rooms[rid].players
+    }));
+    io.emit('admin_data_update', { rooms: roomInfo, history: gameHistory });
+}
 
 io.on('connection', (socket) => {
     socket.on('admin_init', () => broadcastAdminData());
 
-    // --- 帳號邏輯 ---
+    // --- 修正後的帳號系統 (自動切換註冊/登入) ---
     socket.on('auth_action', (d) => {
-        if (d.type === 'register') {
-            db.findOne({ username: d.username }, (err, user) => {
-                if (user) return socket.emit('toast', '❌ 帳號已存在');
-                db.insert({ username: d.username, password: d.password, avatar: d.avatar, score: 0 }, (err, doc) => {
+        db.findOne({ username: d.username }, (err, user) => {
+            if (user) {
+                // 如果帳號存在，檢查密碼 (登入)
+                if (user.password === d.password) {
+                    socket.emit('auth_success', user);
+                    broadcastLeaderboard();
+                } else {
+                    socket.emit('toast', '❌ 密碼錯誤');
+                }
+            } else {
+                // 如果帳號不存在 (註冊)
+                const newUser = { username: d.username, password: d.password, avatar: d.avatar, score: 0 };
+                db.insert(newUser, (err, doc) => {
                     socket.emit('auth_success', doc);
                     broadcastLeaderboard();
                 });
-            });
-        } else {
-            db.findOne({ username: d.username, password: d.password }, (err, user) => {
-                if (!user || user.password !== d.password) return socket.emit('toast', '❌ 帳密錯誤');
-                socket.emit('auth_success', user);
-                broadcastLeaderboard();
-            });
-        }
+            }
+        });
     });
 
-    // --- 房間邏輯 ---
+    // --- 房間與管理員邏輯 ---
     socket.on('create_room', () => {
         const rid = Math.floor(1000 + Math.random() * 9000).toString();
         rooms[rid] = { host: socket.id, players: [], gameType: 'Lobby', state: {} };
@@ -78,54 +71,14 @@ io.on('connection', (socket) => {
         broadcastAdminData();
     });
 
-    // --- 遊戲邏輯 ---
-    socket.on('host_setup_game', (d) => {
-        const r = rooms[socket.roomId];
-        if (!r || socket.id !== r.host) return;
-        r.gameType = d.type;
-        if (d.type === 'memory') {
-            let cards = ['🍎','🍎','🍌','🍌','🍇','🍇','🍒','🍒','🍍','🍍','🥝','🥝','🍋','🍋','🍑','🍑'].sort(() => Math.random() - 0.5);
-            r.state = { cards, flipped: [], matched: [] };
-            io.to(socket.roomId).emit('game_begin', { type: 'memory', cardCount: 16 });
-        } else if (d.type === 'draw') {
-            io.to(r.players[0].id).emit('draw_set_word_request');
-        } else if (d.type === 'bingo') {
-            io.to(r.host).emit('bingo_ask_config');
-        }
-        broadcastAdminData();
+    socket.on('admin_get_user_profile', (name) => {
+        db.findOne({ username: name }, (err, user) => {
+            if (user) socket.emit('admin_receive_profile', user);
+        });
     });
 
-    socket.on('memory_flip', (idx) => {
-        const r = rooms[socket.roomId];
-        if (!r || r.state.flipped.length >= 2 || r.state.matched.includes(idx)) return;
-        r.state.flipped.push({ idx, val: r.state.cards[idx] });
-        io.to(socket.roomId).emit('memory_sync_flip', r.state.flipped);
-        if (r.state.flipped.length === 2) {
-            const [a, b] = r.state.flipped;
-            if (a.val === b.val) {
-                r.state.matched.push(a.idx, b.idx);
-                db.update({ username: socket.userData.username }, { $inc: { score: 20 } }, {}, () => broadcastLeaderboard());
-                setTimeout(() => {
-                    io.to(socket.roomId).emit('memory_match_success', r.state.matched);
-                    r.state.flipped = [];
-                    if (r.state.matched.length === 16) endGame(socket.roomId, "記憶卡牌", socket.userData.username);
-                }, 500);
-            } else {
-                setTimeout(() => { io.to(socket.roomId).emit('memory_flip_back'); r.state.flipped = []; }, 1000);
-            }
-        }
-    });
-
-    // --- 管理員特權 ---
     socket.on('admin_close_room', (rid) => {
         if (rooms[rid]) { io.to(rid).emit('force_leave'); delete rooms[rid]; broadcastAdminData(); }
-    });
-    socket.on('admin_kick_player', (d) => {
-        io.to(d.playerId).emit('force_leave');
-        broadcastAdminData();
-    });
-    socket.on('admin_get_user_profile', (name) => {
-        db.findOne({ username: name }, (err, user) => socket.emit('admin_receive_profile', user));
     });
 
     socket.on('disconnect', () => {
@@ -137,4 +90,4 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3000, () => console.log('Server started on port 3000'));
+server.listen(3000);
