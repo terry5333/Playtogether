@@ -12,21 +12,27 @@ const db = new Datastore({ filename: 'users.db', autoload: true });
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
-let gameHistory = []; // 儲存歷史戰績
+let gameHistory = []; // 儲存最近 20 場遊戲紀錄
 
 const broadcastAdminUpdate = () => {
     db.find({}).sort({ score: -1 }).exec((err, users) => {
         const roomData = Object.keys(rooms).map(rid => ({
             id: rid,
             players: rooms[rid].players,
-            gameType: rooms[rid].gameType
+            gameType: rooms[rid].gameType || '大廳'
         }));
-        // 將每個玩家目前的所在房間標記出來
-        const usersWithLocation = users.map(u => {
-            const room = roomData.find(r => r.players.some(p => p.pin === u.pin));
-            return { ...u, currentRoom: room ? room.id : '大廳' };
+        
+        // 標記玩家位置
+        const usersWithStatus = users.map(u => {
+            const r = roomData.find(room => room.players.some(p => p.pin === u.pin));
+            return { ...u, currentRoom: r ? r.id : '大廳' };
         });
-        io.emit('admin_full_update', { users: usersWithLocation, rooms: roomData, history: gameHistory });
+
+        io.emit('admin_full_update', { 
+            users: usersWithStatus, 
+            rooms: roomData, 
+            history: gameHistory 
+        });
     });
 };
 
@@ -35,9 +41,9 @@ io.on('connection', (socket) => {
         db.findOne({ pin: pin }, (err, user) => socket.emit('pin_result', { exists: !!user, user }));
     });
 
-    // 修正：確保 update 完成後執行回調
     socket.on('save_profile', (data) => {
-        db.update({ pin: data.pin }, { $set: { username: data.username, avatar: data.avatar }, $min: { score: 0 } }, { upsert: true }, (err) => {
+        // 使用 $set 確保只更新特定欄位，並確保有回調
+        db.update({ pin: data.pin }, { $set: { username: data.username, avatar: data.avatar, pin: data.pin }, $min: { score: 0 } }, { upsert: true }, (err) => {
             db.findOne({ pin: data.pin }, (err, user) => {
                 socket.emit('auth_success', user);
                 broadcastAdminUpdate();
@@ -62,18 +68,28 @@ io.on('connection', (socket) => {
             }
             io.to(rid).emit('room_update', rooms[rid]);
             broadcastAdminUpdate();
+        } else {
+            socket.emit('toast', '房間不存在');
         }
     });
 
-    // 模擬遊戲結束紀錄 (未來你遊戲結束時調用此邏輯)
-    socket.on('game_finish_record', (record) => {
-        // record 格式: { game: '記憶卡牌', winner: '小明', players: ['小明', '小華'], time: '2023-10-27' }
-        gameHistory.unshift(record); 
-        if(gameHistory.length > 20) gameHistory.pop(); // 只留前20筆
-        broadcastAdminUpdate();
+    socket.on('admin_init', () => broadcastAdminUpdate());
+
+    // 關閉房間
+    socket.on('admin_close_room', (rid) => {
+        if (rooms[rid]) {
+            io.to(rid).emit('force_leave', '管理員關閉了房間');
+            delete rooms[rid];
+            broadcastAdminUpdate();
+        }
     });
 
-    socket.on('admin_init', () => broadcastAdminUpdate());
+    // 歷史紀錄模擬 (當你之後加入遊戲勝負邏輯時，呼叫此處)
+    socket.on('record_game_end', (record) => {
+        gameHistory.unshift({ ...record, time: new Date().toLocaleTimeString() });
+        if(gameHistory.length > 20) gameHistory.pop();
+        broadcastAdminUpdate();
+    });
 
     socket.on('disconnect', () => {
         if (socket.roomId && rooms[socket.roomId]) {
