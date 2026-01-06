@@ -1,88 +1,145 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PartyBox</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PartyBox 完整版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>.hidden { display: none !important; }</style>
 </head>
-<body class="bg-indigo-50 min-h-screen flex items-center justify-center p-6 text-slate-700">
+<body class="bg-slate-50 text-slate-800">
 
-    <section id="step-pin" class="bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-sm text-center space-y-6">
-        <div class="text-left bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
-            <h3 class="text-xs font-bold text-indigo-500 mb-1">📌 PIN 碼說明</h3>
-            <p class="text-[10px] text-indigo-400 leading-relaxed">這是您的唯一憑證。輸入 4 位數字，新號碼將建立存檔，舊號碼可恢復數據。請務必記牢！</p>
+    <section id="view-pin" class="h-screen flex items-center justify-center p-6">
+        <div class="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm text-center space-y-6">
+            <h1 class="text-3xl font-black text-indigo-500 italic">PartyBox</h1>
+            <input id="pin-in" type="number" placeholder="4位PIN" class="w-full text-center text-4xl p-4 bg-slate-100 rounded-2xl outline-none border-2 border-transparent focus:border-indigo-400">
+            <button onclick="checkPin()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-2xl">進入系統</button>
         </div>
-        <input id="pin-in" type="number" placeholder="0000" class="w-full text-center text-4xl p-4 bg-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-400">
-        <button onclick="checkPin()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-2xl">下一步</button>
     </section>
 
-    <section id="step-profile" class="hidden bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-sm text-center space-y-6">
-        <h2 class="text-xl font-bold">設定角色</h2>
-        <div class="flex justify-center gap-3">
-            <button onclick="selAv('🐶', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-indigo-500">🐶</button>
-            <button onclick="selAv('🐱', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-transparent">🐱</button>
-            <button onclick="selAv('🦊', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-transparent">🦊</button>
+    <section id="view-setup" class="hidden h-screen flex items-center justify-center p-6">
+        <div class="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm text-center space-y-6">
+            <h2 class="text-xl font-bold">新玩家設定</h2>
+            <div class="flex justify-center gap-2" id="av-list">
+                <button onclick="selAv('🐶', this)" class="text-4xl p-2 border-4 border-indigo-500 rounded-xl">🐶</button>
+                <button onclick="selAv('🐱', this)" class="text-4xl p-2 border-4 border-transparent rounded-xl">🐱</button>
+                <button onclick="selAv('🦊', this)" class="text-4xl p-2 border-4 border-transparent rounded-xl">🦊</button>
+            </div>
+            <input id="name-in" type="text" placeholder="你的暱稱" class="w-full p-4 bg-slate-100 rounded-2xl text-center font-bold">
+            <button id="save-btn" onclick="saveProfile()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-2xl">儲存並進入</button>
         </div>
-        <input id="name-in" type="text" placeholder="輸入暱稱" class="w-full p-4 bg-slate-100 rounded-2xl text-center outline-none">
-        <button id="save-btn" onclick="saveProfile()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-2xl">完成並進入</button>
     </section>
 
-    <section id="step-lobby" class="hidden bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-sm text-center space-y-6">
-        <div class="flex flex-col items-center">
-            <div id="w-av" class="text-5xl mb-2"></div>
-            <div id="w-nm" class="text-2xl font-black text-indigo-600"></div>
+    <section id="view-lobby" class="hidden h-screen flex flex-col items-center justify-center p-6 space-y-6">
+        <div class="text-center">
+            <div id="my-av-display" class="text-6xl"></div>
+            <div id="my-name-display" class="text-2xl font-black text-indigo-600"></div>
         </div>
-        <button onclick="socket.emit('create_room')" class="w-full p-6 bg-indigo-500 text-white rounded-3xl font-bold shadow-lg">✨ 建立新房間</button>
-        <div class="pt-4 border-t space-y-2">
-            <input id="rid-in" type="number" placeholder="輸入房號" class="w-full p-4 bg-slate-50 rounded-2xl text-center">
-            <button onclick="joinRoom()" class="w-full p-3 bg-slate-200 text-slate-500 rounded-2xl font-bold">加入房間</button>
+        <button onclick="socket.emit('create_room')" class="w-full max-w-sm p-6 bg-indigo-600 text-white rounded-3xl font-bold shadow-xl text-xl">✨ 創建房間</button>
+        <div class="w-full max-w-sm space-y-2">
+            <input id="join-id" type="number" placeholder="輸入4位房號" class="w-full p-4 bg-white border rounded-2xl text-center outline-none">
+            <button onclick="joinRoom()" class="w-full p-3 bg-slate-200 text-slate-600 rounded-2xl font-bold">加入房間</button>
         </div>
+    </section>
+
+    <section id="view-room" class="hidden p-6 text-center space-y-4">
+        <h2 id="room-title" class="text-sm font-bold text-slate-400">房間 #----</h2>
+        <div class="grid grid-cols-1 gap-4" id="game-options">
+            <button onclick="showConfig('誰是臥底')" class="p-6 bg-purple-500 text-white rounded-3xl font-bold shadow-lg">🕵️ 誰是臥底</button>
+            <button onclick="showConfig('Bingo')" class="p-6 bg-orange-500 text-white rounded-3xl font-bold shadow-lg">🔢 Bingo</button>
+            <button onclick="showConfig('你話我猜')" class="p-6 bg-blue-500 text-white rounded-3xl font-bold shadow-lg">✍️ 你話我猜</button>
+        </div>
+    </section>
+
+    <section id="view-config" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-6">
+        <div class="bg-white p-8 rounded-[2rem] w-full max-w-xs text-center space-y-6">
+            <h3 id="config-name" class="font-bold text-xl">設定</h3>
+            <div id="config-inputs"></div>
+            <button onclick="startGame()" class="w-full p-4 bg-indigo-600 text-white font-bold rounded-2xl">開始遊戲</button>
+        </div>
+    </section>
+
+    <section id="view-game" class="hidden p-4">
+        <div id="timer" class="text-center text-3xl font-mono text-red-500 mb-4"></div>
+        <div id="game-content"></div>
     </section>
 
     <script>
         const socket = io();
-        let myPin = '', myAvatar = '🐶', myUser = null;
+        let myUser, myPin, myAv='🐶', selGameType;
 
-        function v(id) { document.querySelectorAll('section').forEach(s => s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
-        function selAv(av, el) { myAvatar = av; document.querySelectorAll('.av-btn').forEach(b => b.classList.replace('border-indigo-500', 'border-transparent')); el.classList.replace('border-transparent', 'border-indigo-500'); }
+        function v(id) { document.querySelectorAll('section').forEach(s=>s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
+        function selAv(av, el) { myAv=av; document.querySelectorAll('#av-list button').forEach(b=>b.classList.replace('border-indigo-500','border-transparent')); el.classList.replace('border-transparent','border-indigo-500'); }
 
+        // PIN 系統邏輯
         function checkPin() {
             myPin = document.getElementById('pin-in').value;
-            if(myPin.length !== 4) return alert("請輸入 4 位數 PIN");
+            if(myPin.length !== 4) return alert("PIN須為4位");
             socket.emit('check_pin', myPin);
         }
 
         socket.on('pin_result', res => {
             if(res.exists) socket.emit('save_profile', res.user);
-            else v('step-profile');
+            else v('view-setup');
         });
 
         function saveProfile() {
-            const n = document.getElementById('name-in').value;
-            if(!n) return alert("暱稱必填");
-            document.getElementById('save-btn').innerText = "儲存中...";
+            const name = document.getElementById('name-in').value;
+            if(!name) return alert("暱稱不能為空");
             document.getElementById('save-btn').disabled = true;
-            socket.emit('save_profile', { pin: myPin, username: n, avatar: myAvatar });
+            document.getElementById('save-btn').innerText = "儲存中...";
+            socket.emit('save_profile', { pin: myPin, username: name, avatar: myAv });
         }
 
         socket.on('auth_success', user => {
             myUser = user;
-            document.getElementById('w-av').innerText = user.avatar;
-            document.getElementById('w-nm').innerText = user.username;
-            v('step-lobby');
+            document.getElementById('my-av-display').innerText = user.avatar;
+            document.getElementById('my-name-display').innerText = user.username;
+            v('view-lobby');
         });
 
-        function joinRoom() { 
-            const rid = document.getElementById('rid-in').value;
-            socket.emit('join_room', { roomId: rid, user: myUser }); 
+        // 房主參數設定
+        function showConfig(type) {
+            selGameType = type;
+            v('view-config');
+            const box = document.getElementById('config-inputs');
+            if(type==='誰是臥底') box.innerHTML = `<label class='text-xs'>計時秒數</label><input id='c-val' type='number' value='60' class='w-full text-center text-2xl p-2 bg-slate-100 rounded-xl'>`;
+            if(type==='Bingo') box.innerHTML = `<label class='text-xs'>幾條線獲勝</label><input id='c-val' type='number' value='3' class='w-full text-center text-2xl p-2 bg-slate-100 rounded-xl'>`;
+            if(type==='你話我猜') box.innerHTML = `<label class='text-xs'>幾回合數</label><input id='c-val' type='number' value='3' class='w-full text-center text-2xl p-2 bg-slate-100 rounded-xl'>`;
+        }
+
+        function startGame() {
+            const val = document.getElementById('c-val').value;
+            socket.emit('start_game_config', { type: selGameType, timer: val, winLines: val, rounds: val });
+        }
+
+        // 遊戲初始化
+        socket.on('init_game', data => {
+            v('view-game');
+            const gc = document.getElementById('game-content');
+            if(data.type === 'spy') {
+                gc.innerHTML = `<div class='p-10 bg-purple-100 rounded-3xl text-3xl font-black'>${data.word}</div><div id='votes' class='mt-4 grid grid-cols-2 gap-2'></div>`;
+                startTimer(data.timer);
+            }
+            if(data.type === 'bingo') {
+                gc.innerHTML = `<p class='text-xs mb-2'>輪流點選號碼</p><div id='b-grid' class='grid grid-cols-5 gap-1'></div>`;
+                for(let i=1; i<=25; i++) gc.querySelector('#b-grid').innerHTML += `<button onclick="this.classList.add('bg-orange-500','text-white')" class='h-12 border rounded font-bold'>${i}</button>`;
+            }
+        });
+
+        function startTimer(s) {
+            let c = s;
+            const t = document.getElementById('timer');
+            const i = setInterval(() => {
+                t.innerText = c;
+                if(c-- <= 0) { clearInterval(i); alert("時間到，開始投票！"); }
+            }, 1000);
         }
 
         socket.on('room_created', rid => socket.emit('join_room', { roomId: rid, user: myUser }));
-        socket.on('room_update', r => alert(`已在房間 #${r.id}`));
-        socket.on('force_leave', m => { alert(m); location.reload(); });
+        function joinRoom() { socket.emit('join_room', { roomId: document.getElementById('join-id').value, user: myUser }); }
+        socket.on('room_update', r => { v('view-room'); document.getElementById('room-title').innerText = "房間 #" + r.id; });
     </script>
 </body>
 </html>
