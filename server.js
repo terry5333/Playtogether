@@ -1,61 +1,39 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
 const Datastore = require('nedb');
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-
 const db = new Datastore({ filename: 'users.db', autoload: true });
-app.use(express.static(path.join(__dirname, 'public')));
+
+app.use(express.static('public'));
 
 let rooms = {};
-let gameHistory = []; // 儲存最近 20 場遊戲紀錄
+let gameHistory = [];
 
-const broadcastAdminUpdate = () => {
-    db.find({}).sort({ score: -1 }).exec((err, users) => {
-        const roomData = Object.keys(rooms).map(rid => ({
-            id: rid,
-            players: rooms[rid].players,
-            gameType: rooms[rid].gameType || '大廳'
-        }));
-        
-        // 標記玩家位置
-        const usersWithStatus = users.map(u => {
-            const r = roomData.find(room => room.players.some(p => p.pin === u.pin));
-            return { ...u, currentRoom: r ? r.id : '大廳' };
-        });
-
-        io.emit('admin_full_update', { 
-            users: usersWithStatus, 
-            rooms: roomData, 
-            history: gameHistory 
-        });
-    });
-};
+const spyWords = [['蘋果', '梨子'], ['醫生', '護士'], ['自拍', '他拍'], ['咖啡', '奶茶'], ['火鍋', '燒烤']];
 
 io.on('connection', (socket) => {
+    // --- PIN 碼與帳號系統 ---
     socket.on('check_pin', (pin) => {
-        db.findOne({ pin: pin }, (err, user) => socket.emit('pin_result', { exists: !!user, user }));
+        db.findOne({ pin }, (err, user) => socket.emit('pin_result', { exists: !!user, user }));
     });
 
     socket.on('save_profile', (data) => {
-        // 使用 $set 確保只更新特定欄位，並確保有回調
-        db.update({ pin: data.pin }, { $set: { username: data.username, avatar: data.avatar, pin: data.pin }, $min: { score: 0 } }, { upsert: true }, (err) => {
+        db.update({ pin: data.pin }, { $set: data, $min: { score: 0 } }, { upsert: true }, () => {
             db.findOne({ pin: data.pin }, (err, user) => {
                 socket.emit('auth_success', user);
-                broadcastAdminUpdate();
+                updateAdmin();
             });
         });
     });
 
+    // --- 創房與房間管理 ---
     socket.on('create_room', () => {
         const rid = Math.floor(1000 + Math.random() * 9000).toString();
-        rooms[rid] = { id: rid, players: [], gameType: '準備中' };
+        rooms[rid] = { id: rid, players: [], status: 'LOBBY', host: socket.id, gameType: null, config: {} };
         socket.emit('room_created', rid);
-        broadcastAdminUpdate();
     });
 
     socket.on('join_room', (data) => {
@@ -64,40 +42,40 @@ io.on('connection', (socket) => {
             socket.join(rid);
             socket.roomId = rid;
             if (!rooms[rid].players.find(p => p.pin === data.user.pin)) {
-                rooms[rid].players.push({ socketId: socket.id, ...data.user });
+                rooms[rid].players.push({ ...data.user, socketId: socket.id, ready: false });
             }
             io.to(rid).emit('room_update', rooms[rid]);
-            broadcastAdminUpdate();
-        } else {
-            socket.emit('toast', '房間不存在');
         }
     });
 
-    socket.on('admin_init', () => broadcastAdminUpdate());
-
-    // 關閉房間
-    socket.on('admin_close_room', (rid) => {
-        if (rooms[rid]) {
-            io.to(rid).emit('force_leave', '管理員關閉了房間');
-            delete rooms[rid];
-            broadcastAdminUpdate();
+    // --- 遊戲參數設定 (需求 4, 5, 6) ---
+    socket.on('start_game_config', (config) => {
+        const r = rooms[socket.roomId];
+        if (!r) return;
+        r.config = config;
+        r.status = 'PLAYING';
+        
+        if (config.type === '誰是臥底') {
+            const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
+            const spyIdx = Math.floor(Math.random() * r.players.length);
+            r.players.forEach((p, i) => {
+                io.to(p.socketId).emit('init_game', { type: 'spy', word: i === spyIdx ? pair[1] : pair[0], timer: config.timer });
+            });
+        } 
+        else if (config.type === 'Bingo') {
+            io.to(socket.roomId).emit('init_game', { type: 'bingo', winLines: config.winLines });
         }
     });
 
-    // 歷史紀錄模擬 (當你之後加入遊戲勝負邏輯時，呼叫此處)
-    socket.on('record_game_end', (record) => {
-        gameHistory.unshift({ ...record, time: new Date().toLocaleTimeString() });
-        if(gameHistory.length > 20) gameHistory.pop();
-        broadcastAdminUpdate();
-    });
-
-    socket.on('disconnect', () => {
-        if (socket.roomId && rooms[socket.roomId]) {
-            rooms[socket.roomId].players = rooms[socket.roomId].players.filter(p => p.socketId !== socket.id);
-            if (rooms[socket.roomId].players.length === 0) delete rooms[socket.roomId];
-            broadcastAdminUpdate();
-        }
+    // --- 加分系統 ---
+    socket.on('add_win_score', (pin) => {
+        db.update({ pin: pin }, { $inc: { score: 10 } }, {}, () => updateAdmin());
     });
 });
 
+function updateAdmin() {
+    db.find({}).sort({ score: -1 }).exec((err, users) => {
+        io.emit('admin_update', { users, rooms });
+    });
+}
 server.listen(3000);
