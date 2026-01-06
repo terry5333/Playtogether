@@ -13,56 +13,87 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
 
+// 廣播最新數據給 Admin
+const broadcastAdminUpdate = () => {
+    db.find({}).sort({ score: -1 }).exec((err, users) => {
+        const roomData = Object.keys(rooms).map(rid => ({
+            id: rid,
+            players: rooms[rid].players,
+            gameType: rooms[rid].gameType
+        }));
+        io.emit('admin_full_update', { users, rooms: roomData });
+    });
+};
+
 io.on('connection', (socket) => {
-    // --- 4位數密碼登入邏輯 ---
-    socket.on('auth_action', (d) => {
-        // 使用 4 位數密碼作為唯一識別碼
-        db.findOne({ pin: d.pin }, (err, user) => {
-            if (user) {
-                // 已存在的用戶，直接登入
-                socket.emit('auth_success', user);
-            } else {
-                // 新用戶，使用 pin 建立帳號，名稱預設為 "玩家"+pin
-                const newUser = { 
-                    pin: d.pin, 
-                    username: `玩家${d.pin}`, 
-                    avatar: d.avatar, 
-                    score: 0 
-                };
-                db.insert(newUser, (err, doc) => {
-                    socket.emit('auth_success', doc);
-                });
-            }
-            db.find({}).sort({ score: -1 }).limit(10).exec((err, docs) => io.emit('leaderboard_update', docs));
-        });
-    });
-
-    // 獲取個人檔案
-    socket.on('admin_get_user_profile', (pin) => {
+    // --- 玩家登入與資料設定 ---
+    socket.on('check_pin', (pin) => {
         db.findOne({ pin: pin }, (err, user) => {
-            if (user) socket.emit('admin_receive_profile', user);
+            socket.emit('pin_result', { exists: !!user, user });
         });
     });
 
-    // 房間邏輯 (同前)
+    socket.on('save_profile', (data) => {
+        db.update({ pin: data.pin }, { ...data, score: data.score || 0 }, { upsert: true }, () => {
+            db.findOne({ pin: data.pin }, (err, user) => {
+                socket.emit('auth_success', user);
+                broadcastAdminUpdate();
+            });
+        });
+    });
+
+    // --- 房間系統 ---
     socket.on('create_room', () => {
         const rid = Math.floor(1000 + Math.random() * 9000).toString();
-        rooms[rid] = { host: socket.id, players: [], gameType: 'Lobby' };
-        socket.emit('room_created', { roomId: rid });
+        rooms[rid] = { id: rid, players: [], gameType: '遊戲大廳' };
+        socket.emit('room_created', rid);
+        broadcastAdminUpdate();
     });
 
-    socket.on('join_room', (d) => {
-        if (!rooms[d.roomId]) return socket.emit('toast', '❌ 房間不存在');
-        socket.join(d.roomId);
-        socket.roomId = d.roomId;
-        rooms[d.roomId].players.push({ id: socket.id, ...d.user });
-        io.to(d.roomId).emit('room_update', { roomId: d.roomId, players: rooms[d.roomId].players, hostId: rooms[d.roomId].host });
+    socket.on('join_room', (data) => {
+        const rid = data.roomId;
+        if (rooms[rid]) {
+            socket.join(rid);
+            socket.roomId = rid;
+            if (!rooms[rid].players.find(p => p.pin === data.user.pin)) {
+                rooms[rid].players.push({ socketId: socket.id, ...data.user });
+            }
+            io.to(rid).emit('room_update', rooms[rid]);
+            broadcastAdminUpdate();
+        } else {
+            socket.emit('toast', '❌ 房間不存在');
+        }
+    });
+
+    // --- Admin 管理功能 ---
+    socket.on('admin_init', () => broadcastAdminUpdate());
+
+    socket.on('admin_close_room', (rid) => {
+        if (rooms[rid]) {
+            io.to(rid).emit('force_leave', '🔴 房間已被管理員關閉');
+            delete rooms[rid];
+            broadcastAdminUpdate();
+        }
+    });
+
+    socket.on('admin_kick_player', (data) => {
+        if (rooms[data.roomId]) {
+            rooms[data.roomId].players = rooms[data.roomId].players.filter(p => p.socketId !== data.socketId);
+            io.to(data.socketId).emit('force_leave', '🚫 你已被管理員踢出房間');
+            io.to(data.roomId).emit('room_update', rooms[data.roomId]);
+            broadcastAdminUpdate();
+        }
+    });
+
+    socket.on('admin_delete_user', (id) => {
+        db.remove({ _id: id }, {}, () => broadcastAdminUpdate());
     });
 
     socket.on('disconnect', () => {
         if (socket.roomId && rooms[socket.roomId]) {
-            rooms[socket.roomId].players = rooms[socket.roomId].players.filter(p => p.id !== socket.id);
+            rooms[socket.roomId].players = rooms[socket.roomId].players.filter(p => p.socketId !== socket.id);
             if (rooms[socket.roomId].players.length === 0) delete rooms[socket.roomId];
+            broadcastAdminUpdate();
         }
     });
 });
