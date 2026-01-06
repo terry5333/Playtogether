@@ -1,20 +1,27 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>Admin Panel</title>
+    <title>PartyBox Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
-<body class="bg-gray-950 text-slate-200 p-8">
-    <div class="max-w-7xl mx-auto grid lg:grid-cols-2 gap-8">
-        <div class="bg-gray-900 p-6 rounded-3xl border border-gray-800">
-            <h2 class="text-xl font-bold mb-4">🏆 玩家清單與戰績</h2>
-            <div id="user-list" class="space-y-2"></div>
+<body class="bg-slate-950 text-slate-200 p-8 font-sans">
+    <div class="max-w-7xl mx-auto space-y-10">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-6">
+            <h1 class="text-3xl font-black">SYSTEM <span class="text-indigo-500">ADMIN</span></h1>
         </div>
-        <div class="bg-gray-900 p-6 rounded-3xl border border-gray-800">
-            <h2 class="text-xl font-bold mb-4">🎮 即時房間監控</h2>
-            <div id="room-monitor" class="space-y-4"></div>
+
+        <div class="grid lg:grid-cols-2 gap-10">
+            <div class="bg-slate-900 rounded-[2rem] p-6 border border-slate-800">
+                <h2 class="text-xl font-bold mb-6">🏆 全球戰績與 PIN 碼</h2>
+                <div id="user-list" class="space-y-3 max-h-[600px] overflow-y-auto pr-2"></div>
+            </div>
+
+            <div class="bg-slate-900 rounded-[2rem] p-6 border border-slate-800">
+                <h2 class="text-xl font-bold mb-6">🎮 即時房間監控</h2>
+                <div id="room-monitor" class="space-y-4"></div>
+            </div>
         </div>
     </div>
 
@@ -23,29 +30,44 @@
         socket.emit('admin_init');
 
         socket.on('admin_full_update', data => {
-            document.getElementById('user-list').innerHTML = data.users.map(u => `
-                <div class="flex justify-between items-center bg-gray-800 p-3 rounded-xl">
-                    <span>${u.avatar} <b>${u.username}</b> (${u.pin})</span>
+            // 渲染玩家列表
+            const uList = document.getElementById('user-list');
+            uList.innerHTML = data.users.map(u => `
+                <div class="flex justify-between items-center bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">${u.avatar}</span>
+                        <div>
+                            <div class="font-bold text-white text-sm">${u.username}</div>
+                            <div class="text-[10px] text-indigo-400 font-mono">PIN: ${u.pin}</div>
+                        </div>
+                    </div>
                     <div class="flex items-center gap-4">
-                        <span class="text-indigo-400 font-bold">${u.score} PT</span>
-                        <button onclick="socket.emit('admin_delete_user','${u._id}')" class="text-red-500 text-xs">刪除</button>
+                        <span class="text-yellow-500 font-black text-xs">${u.score} pt</span>
+                        <button onclick="if(confirm('確定刪除？')) socket.emit('admin_delete_user','${u._id}')" 
+                                class="text-red-500 text-[10px] font-bold hover:underline">刪除</button>
                     </div>
                 </div>
             `).join('');
 
-            const rm = document.getElementById('room-monitor');
-            if(data.rooms.length === 0) { rm.innerHTML = "目前無房間"; return; }
-            rm.innerHTML = data.rooms.map(r => `
-                <div class="bg-gray-800 p-4 rounded-2xl border border-gray-700">
-                    <div class="flex justify-between mb-3">
-                        <span class="bg-indigo-600 px-2 rounded">#${r.id}</span>
-                        <button onclick="socket.emit('admin_close_room','${r.id}')" class="text-red-400 text-xs">關閉房間</button>
+            // 渲染房間列表
+            const rMon = document.getElementById('room-monitor');
+            if(data.rooms.length === 0) {
+                rMon.innerHTML = `<div class="text-center py-20 text-slate-600 italic">目前無進行中房間</div>`;
+                return;
+            }
+            rMon.innerHTML = data.rooms.map(r => `
+                <div class="bg-slate-800 p-5 rounded-3xl border border-indigo-500/30">
+                    <div class="flex justify-between items-center mb-4">
+                        <span class="bg-indigo-600 text-white text-xs font-black px-3 py-1 rounded-lg">ROOM #${r.id}</span>
+                        <button onclick="socket.emit('admin_close_room','${r.id}')" 
+                                class="bg-red-500/10 text-red-500 text-[10px] px-2 py-1 rounded-md border border-red-500/20">關閉房間</button>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                         ${r.players.map(p => `
-                            <div class="text-xs bg-gray-900 p-2 rounded flex justify-between">
-                                <span>${p.avatar} ${p.username}</span>
-                                <button onclick="socket.emit('admin_kick_player',{roomId:'${r.id}',socketId:'${p.socketId}'})" class="text-orange-500">踢出</button>
+                            <div class="bg-slate-900 p-2 rounded-xl flex justify-between items-center border border-slate-700/50">
+                                <span class="text-[10px] font-bold">${p.avatar} ${p.username}</span>
+                                <button onclick="socket.emit('admin_kick_player',{roomId:'${r.id}',socketId:'${p.socketId}'})" 
+                                        class="text-orange-500 text-[10px] hover:text-white">踢出</button>
                             </div>
                         `).join('')}
                     </div>
