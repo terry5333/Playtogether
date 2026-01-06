@@ -6,7 +6,230 @@
     <title>PartyBox 2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style><!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PartyBox 2.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
+        .hidden { display: none !important; }
+        .card { border-radius: 2.5rem; background: white; box-shadow: 0 10px 40px rgba(0,0,0,0.05); }
+        .btn { transition: 0.2s; border-radius: 1.25rem; font-weight: bold; }
+        .btn:active { transform: scale(0.95); }
+        /* 記憶卡牌樣式 */
+        .mem-card { height: 75px; background: #f1f5f9; border-radius: 1rem; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; cursor: pointer; }
+        .mem-card.flipped { background: white; border: 2px solid #e2e8f0; }
+        .mem-card.matched { background: #dcfce7; opacity: 0.5; cursor: default; }
+    </style>
+</head>
+<body class="bg-[#F2EBE1] min-h-screen flex items-center justify-center p-4">
+    <div id="toast" class="fixed top-8 bg-black/80 text-white px-8 py-3 rounded-full opacity-0 transition-all z-[999] pointer-events-none"></div>
+
+    <section id="view-auth" class="card p-10 w-full max-w-sm space-y-6 text-center">
+        <h1 class="text-4xl font-black text-blue-300 italic">PartyBox</h1>
+        
+        <div class="flex justify-center gap-3" id="avatars">
+            <button onclick="selAv('🐶', this)" class="av-btn text-2xl p-2 border-2 rounded-2xl border-blue-400">🐶</button>
+            <button onclick="selAv('🐱', this)" class="av-btn text-2xl p-2 border-2 rounded-2xl border-transparent">🐱</button>
+            <button onclick="selAv('🦊', this)" class="av-btn text-2xl p-2 border-2 rounded-2xl border-transparent">🦊</button>
+            <button onclick="selAv('🦁', this)" class="av-btn text-2xl p-2 border-2 rounded-2xl border-transparent">🦁</button>
+        </div>
+
+        <div class="space-y-3">
+            <input id="u" type="text" placeholder="帳號名稱" class="w-full p-4 bg-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-300">
+            <input id="p" type="password" placeholder="密碼" class="w-full p-4 bg-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-300">
+        </div>
+
+        <button onclick="auth()" class="w-full p-4 bg-blue-400 text-white btn hover:bg-blue-500 shadow-lg shadow-blue-200">進入派對</button>
+    </section>
+
+    <section id="view-lobby" class="hidden card p-8 w-full max-w-sm space-y-6">
+        <div class="flex justify-between items-center bg-blue-50 p-4 rounded-3xl">
+            <div class="flex items-center gap-2">
+                <span id="my-av" class="text-2xl">🐶</span>
+                <span id="my-name" class="font-bold text-blue-600">---</span>
+            </div>
+            <span id="my-score" class="bg-blue-400 text-white px-3 py-1 rounded-full text-xs font-bold">0 pt</span>
+        </div>
+
+        <div class="bg-gray-50 p-4 rounded-3xl text-sm">
+            <h4 class="font-bold text-gray-400 mb-2 tracking-widest uppercase text-[10px]">🏆 全服排行</h4>
+            <div id="leaders" class="space-y-1 text-slate-500"></div>
+        </div>
+
+        <div id="actions" class="space-y-2">
+            <button onclick="socket.emit('create_room')" class="w-full p-4 bg-blue-400 text-white btn">建立房間</button>
+            <div class="flex gap-2">
+                <input id="rid-input" type="number" placeholder="輸入房號" class="w-2/3 p-4 bg-gray-100 rounded-2xl outline-none">
+                <button onclick="join()" class="w-1/3 bg-gray-200 btn">加入</button>
+            </div>
+        </div>
+
+        <div id="wait" class="hidden text-center space-y-4">
+            <div class="text-xs text-gray-400 font-bold uppercase tracking-widest">Room ID</div>
+            <h2 id="room-id-disp" class="text-5xl font-black text-slate-700">----</h2>
+            <div id="player-list" class="flex flex-wrap gap-2 justify-center"></div>
+            <div id="host-zone" class="hidden pt-4 border-t space-y-2">
+                <button onclick="socket.emit('host_setup_game',{type:'memory'})" class="w-full p-4 bg-blue-100 text-blue-500 btn">🧠 記憶卡牌遊戲</button>
+            </div>
+        </div>
+    </section>
+
+    <section id="view-memory" class="hidden card p-6 w-full max-w-md text-center">
+        <div class="mb-4 font-bold text-slate-400">配對所有卡牌！</div>
+        <div id="mem-grid" class="grid grid-cols-4 gap-2"></div>
+    </section>
+
+    <script>
+        const socket = io();
+        let myUser = null;
+        let currentAvatar = '🐶';
+
+        function v(id) {
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function showT(m) {
+            const t = document.getElementById('toast');
+            t.innerText = m;
+            t.style.opacity = 1;
+            setTimeout(() => t.style.opacity = 0, 2000);
+        }
+        
+        // 修正後的頭像選擇函式
+        function selAv(emoji, btnElement) { 
+            currentAvatar = emoji; 
+            // 移除所有按鈕的藍色邊框
+            document.querySelectorAll('.av-btn').forEach(b => {
+                b.classList.remove('border-blue-400');
+                b.classList.add('border-transparent');
+            });
+            // 為點擊的按鈕加上藍色邊框
+            btnElement.classList.remove('border-transparent');
+            btnElement.classList.add('border-blue-400');
+        }
+
+        // 修正後的進入派對函式
+        function auth() {
+            const username = document.getElementById('u').value.trim();
+            const password = document.getElementById('p').value.trim();
+            
+            if(!username || !password) {
+                showT("⚠️ 請輸入帳號與密碼");
+                return;
+            }
+
+            console.log("嘗試登入:", username, currentAvatar);
+            socket.emit('auth_action', { 
+                username: username, 
+                password: password, 
+                avatar: currentAvatar 
+            });
+        }
+
+        socket.on('auth_success', user => {
+            myUser = user;
+            document.getElementById('my-av').innerText = user.avatar;
+            document.getElementById('my-name').innerText = user.username;
+            v('view-lobby');
+            showT("✨ 歡迎回來，" + user.username);
+        });
+
+        socket.on('leaderboard_update', list => {
+            const listEl = document.getElementById('leaders');
+            listEl.innerHTML = list.map((u, i) => `
+                <div class="flex justify-between items-center border-b border-gray-100 py-1 last:border-0">
+                    <span>${i+1}. ${u.avatar} ${u.username}</span>
+                    <span class="font-bold text-slate-400">${u.score}</span>
+                </div>
+            `).join('');
+            
+            if(myUser) {
+                const me = list.find(u => u.username === myUser.username);
+                if(me) document.getElementById('my-score').innerText = me.score + " pt";
+            }
+        });
+
+        function join() {
+            const rid = document.getElementById('rid-input').value;
+            if(!rid) return showT("請輸入房號");
+            socket.emit('join_room', { roomId: rid, user: myUser });
+        }
+
+        socket.on('room_created', d => {
+            socket.emit('join_room', { roomId: d.roomId, user: myUser });
+        });
+
+        socket.on('room_update', d => {
+            v('view-lobby');
+            document.getElementById('actions').classList.add('hidden');
+            document.getElementById('wait').classList.remove('hidden');
+            document.getElementById('room-id-disp').innerText = d.roomId;
+            document.getElementById('host-zone').classList.toggle('hidden', socket.id !== d.hostId);
+            document.getElementById('player-list').innerHTML = d.players.map(p => `
+                <div class="flex flex-col items-center bg-white border border-gray-100 p-2 rounded-2xl w-16 shadow-sm">
+                    <div class="text-2xl">${p.avatar}</div>
+                    <div class="text-[10px] font-bold truncate w-full text-center">${p.username}</div>
+                </div>
+            `).join('');
+        });
+
+        // 遊戲邏輯與強制離開事件
+        socket.on('game_begin', d => {
+            if(d.type === 'memory') {
+                v('view-memory');
+                const g = document.getElementById('mem-grid');
+                g.innerHTML = '';
+                for(let i=0; i<d.cardCount; i++) {
+                    const c = document.createElement('div');
+                    c.className = "mem-card shadow-sm hover:shadow-md transition-all"; 
+                    c.onclick = () => socket.emit('memory_flip', i);
+                    c.dataset.idx = i;
+                    g.appendChild(c);
+                }
+            }
+        });
+
+        socket.on('memory_sync_flip', f => f.forEach(x => {
+            const e = document.querySelector(`[data-idx="${x.idx}"]`);
+            if(e) {
+                e.innerText = x.val;
+                e.classList.add('flipped');
+            }
+        }));
+
+        socket.on('memory_flip_back', () => {
+            document.querySelectorAll('.mem-card:not(.matched)').forEach(e => {
+                e.innerText = '';
+                e.classList.remove('flipped');
+            });
+        });
+
+        socket.on('memory_match_success', m => {
+            m.forEach(i => {
+                const e = document.querySelector(`[data-idx="${i}"]`);
+                if(e) e.classList.add('matched');
+            });
+        });
+
+        socket.on('game_over', d => {
+            alert("👑 遊戲結束！贏家是: " + d.winner);
+            v('view-lobby');
+        });
+
+        socket.on('force_leave', () => {
+            alert("🚫 房間已關閉或你已被移出");
+            location.reload();
+        });
+
+        socket.on('toast', m => showT(m));
+    </script>
+</body>
+</html>
         .hidden { display: none !important; }
         .card { border-radius: 2.5rem; background: white; box-shadow: 0 10px 40px rgba(0,0,0,0.05); }
         .btn { transition: 0.2s; border-radius: 1.25rem; font-weight: bold; }
