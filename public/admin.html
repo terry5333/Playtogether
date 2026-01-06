@@ -2,62 +2,46 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>上帝視角管理後台</title>
+    <title>管理員上帝視角</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
-<body class="bg-slate-950 text-white p-10 font-sans">
-    <div class="flex justify-between items-center mb-12">
-        <h1 class="text-3xl font-black text-cyan-500 italic">SYSTEM MONITOR</h1>
-        <div class="flex gap-4">
-            <input id="pw" type="password" placeholder="管理密碼" onchange="refresh()" class="bg-slate-900 border border-slate-700 px-4 py-2 rounded-xl text-sm focus:border-cyan-500 outline-none">
-            <button onclick="refresh()" class="bg-cyan-600 px-6 py-2 rounded-xl font-bold">刷新數據</button>
-        </div>
+<body class="bg-slate-950 text-white p-10">
+    <div class="flex justify-between items-center mb-10">
+        <h1 class="text-2xl font-black text-cyan-500 italic">SYSTEM MONITOR</h1>
+        <input id="pw" type="password" placeholder="密碼 9999" onchange="load()" class="bg-slate-900 border border-slate-700 p-2 rounded-xl outline-none">
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <div class="bg-slate-900/50 p-8 rounded-[2.5rem] border border-white/5">
-            <h2 class="text-xl font-bold mb-6 flex items-center gap-2">🏠 活躍房間</h2>
-            <div id="admin-rooms" class="space-y-4"></div>
+        <div class="bg-slate-900/50 p-8 rounded-3xl border border-white/5">
+            <h2 class="text-xl font-bold mb-6">🏠 活躍房間</h2>
+            <div id="r-list" class="space-y-4"></div>
         </div>
-        <div class="bg-slate-900/50 p-8 rounded-[2.5rem] border border-white/5">
-            <h2 class="text-xl font-bold mb-6 flex items-center gap-2">👤 玩家個資/積分</h2>
-            <div id="admin-users" class="space-y-4"></div>
+        <div class="bg-slate-900/50 p-8 rounded-3xl border border-white/5">
+            <h2 class="text-xl font-bold mb-6">👤 玩家名冊與積分</h2>
+            <div id="u-list" class="space-y-4"></div>
         </div>
     </div>
 
     <script>
         const socket = io();
-        function refresh() { socket.emit('admin_login', document.getElementById('pw').value); }
-        
+        function load() { socket.emit('admin_login', document.getElementById('pw').value); }
         socket.on('admin_data', data => {
-            document.getElementById('admin-rooms').innerHTML = data.rooms.map(r => `
-                <div class="flex justify-between items-center p-5 bg-black/30 rounded-2xl border border-white/5">
-                    <div>
-                        <span class="text-cyan-400 font-mono font-bold text-lg">#${r.id}</span>
-                        <p class="text-[10px] text-slate-500">房主 PIN: ${r.hostPin} | 人數: ${r.players.length}</p>
-                    </div>
-                    <button onclick="socket.emit('admin_kick_room','${r.id}')" class="bg-red-500/10 text-red-500 px-4 py-1 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-white transition">解散房間</button>
+            document.getElementById('r-list').innerHTML = data.rooms.map(r => `
+                <div class="flex justify-between bg-black/20 p-4 rounded-2xl">
+                    <span>房號: ${r.id} (人數: ${r.players.length})</span>
                 </div>`).join('');
-            
-            document.getElementById('admin-users').innerHTML = data.users.map(u => `
-                <div class="flex justify-between items-center p-5 bg-black/30 rounded-2xl border border-white/5">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">${u.avatar}</span>
-                        <div>
-                            <p class="font-bold">${u.username}</p>
-                            <p class="text-[10px] text-slate-500 font-mono">PIN: ${u.pin}</p>
-                        </div>
-                    </div>
+            document.getElementById('u-list').innerHTML = data.users.map(u => `
+                <div class="flex justify-between items-center bg-black/20 p-4 rounded-2xl">
+                    <span>${u.username} (${u.pin})</span>
                     <div class="flex items-center gap-2">
-                        <span class="text-xs text-slate-500 font-bold uppercase">積分</span>
-                        <input type="number" value="${u.score}" onchange="update('${u.pin}', this.value, '${u.username}')" class="w-20 bg-cyan-950/30 text-center border border-cyan-500/30 rounded-lg py-1 font-bold text-cyan-400">
+                        <span class="text-xs text-slate-500">積分:</span>
+                        <input type="number" value="${u.score}" onchange="update('${u.pin}', this.value)" class="w-16 bg-cyan-950 text-center border border-cyan-500 rounded text-cyan-400">
                     </div>
                 </div>`).join('');
         });
-        
-        function update(pin, s, n) { socket.emit('admin_update_user', {pin, score:s, username:n}); }
-        setInterval(refresh, 5000); // 每 5 秒自動重新載入
+        function update(pin, s) { socket.emit('admin_update_user', {pin, score:s}); }
+        setInterval(load, 5000);
     </script>
 </body>
 </html>
