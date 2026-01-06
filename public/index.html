@@ -2,90 +2,108 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PartyBox Fix</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PartyBox 穩定版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>.hidden { display: none !important; }</style>
 </head>
-<body class="bg-slate-100">
+<body class="bg-slate-50">
 
-    <section id="v-pin" class="h-screen flex items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm text-center">
-            <h1 class="text-2xl font-bold mb-4">輸入 PIN 碼</h1>
-            <input id="input-pin" type="text" inputmode="numeric" placeholder="4位數字" 
-                   class="w-full text-center text-3xl p-3 bg-slate-50 rounded-xl mb-4 outline-none">
-            <button onclick="handleCheckPin()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-xl">登入</button>
+    <section id="page-pin" class="h-screen flex items-center justify-center p-6">
+        <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-full max-w-sm text-center">
+            <h1 class="text-3xl font-black text-indigo-500 mb-6 italic">PartyBox</h1>
+            <input id="target-pin" type="text" inputmode="numeric" maxlength="4" placeholder="4位數PIN" 
+                   class="w-full text-center text-4xl p-4 bg-slate-100 rounded-2xl outline-none border-4 border-transparent focus:border-indigo-400 font-mono">
+            <button onclick="safeCheckPin()" class="w-full mt-6 p-4 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition">開始遊戲</button>
         </div>
     </section>
 
-    <section id="v-setup" class="hidden h-screen flex items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm text-center">
-            <h2 class="font-bold mb-4">設定你的名字</h2>
-            <input id="input-name" type="text" placeholder="輸入暱稱" 
-                   class="w-full text-center p-3 bg-slate-50 rounded-xl mb-4">
-            <button id="btn-save" onclick="handleSaveProfile()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-xl">完成</button>
+    <section id="page-setup" class="hidden h-screen flex items-center justify-center p-6">
+        <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-full max-w-sm text-center">
+            <h2 class="text-xl font-bold mb-6">設定你的角色</h2>
+            <input id="target-name" type="text" placeholder="輸入你的暱稱" 
+                   class="w-full text-center p-4 bg-slate-100 rounded-2xl text-xl font-bold">
+            <button id="save-trigger" onclick="safeSaveProfile()" class="w-full mt-6 p-4 bg-indigo-600 text-white font-bold rounded-2xl">儲存並進入</button>
         </div>
     </section>
 
-    <section id="v-lobby" class="hidden p-8 text-center">
-        <h2 class="text-xl font-bold">歡迎回來，<span id="name-tag"></span></h2>
-        <button onclick="socket.emit('create_room')" class="mt-4 p-4 bg-blue-500 text-white rounded-xl">建立房間</button>
+    <section id="page-lobby" class="hidden h-screen flex flex-col items-center justify-center p-6 space-y-4">
+        <div class="bg-white p-6 rounded-3xl shadow-xl w-full max-w-sm text-center">
+            <p class="text-slate-400">登入成功</p>
+            <h2 id="display-username" class="text-2xl font-black text-indigo-600"></h2>
+            <button onclick="socket.emit('create_room')" class="w-full mt-6 p-6 bg-indigo-500 text-white rounded-3xl font-bold text-xl shadow-lg">✨ 建立新房間</button>
+        </div>
     </section>
 
     <script>
+        // 確保在 script 執行時 socket 已定義
         const socket = io();
-        let myPin = "";
+        let globalPin = "";
 
-        // 通用的切換畫面函數，增加安全檢查
-        function switchView(id) {
-            const el = document.getElementById(id);
-            if (!el) return console.error("找不到 Section ID:", id);
-            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-            el.classList.remove('hidden');
+        // 安全切換畫面
+        function goto(pageId) {
+            const sections = document.querySelectorAll('section');
+            sections.forEach(s => s.classList.add('hidden'));
+            const target = document.getElementById(pageId);
+            if (target) {
+                target.classList.remove('hidden');
+            } else {
+                console.error("找不到頁面 ID:", pageId);
+            }
         }
 
-        // 1. PIN 檢查
-        function handleCheckPin() {
-            const el = document.getElementById('input-pin');
-            if (!el) return;
-            myPin = el.value; // 使用 .value 替代 .valueAsNumber
-            if (myPin.length !== 4) return alert("請輸入 4 位 PIN");
-            socket.emit('check_pin', myPin);
+        // 1. PIN 檢查流程
+        function safeCheckPin() {
+            const input = document.getElementById('target-pin');
+            if (!input) return;
+            globalPin = input.value; // 不要使用 valueAsNumber，字串最穩
+            if (globalPin.length !== 4) return alert("請輸入 4 位 PIN");
+            socket.emit('check_pin', globalPin);
         }
 
-        socket.on('pin_result', res => {
+        socket.on('pin_result', (res) => {
             if (res.exists) {
-                // 已經有資料，直接發送存檔請求來觸發 auth_success
+                // 如果是老玩家，直接拿舊資料進行模擬登入
                 socket.emit('save_profile', res.user);
             } else {
-                switchView('v-setup');
+                goto('page-setup');
             }
         });
 
-        // 2. 儲存設定
-        function handleSaveProfile() {
-            const nameEl = document.getElementById('input-name');
-            if (!nameEl) return;
-            const name = nameEl.value.trim();
-            if (!name) return alert("請輸入名字");
+        // 2. 資料儲存流程
+        function safeSaveProfile() {
+            const nameInput = document.getElementById('target-name');
+            const name = nameInput ? nameInput.value.trim() : "";
+            if (!name) return alert("請填寫名字");
 
-            const btn = document.getElementById('btn-save');
-            btn.disabled = true;
-            btn.innerText = "儲存中...";
+            const btn = document.getElementById('save-trigger');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = "正在儲存...";
+            }
 
             socket.emit('save_profile', {
-                pin: myPin,
+                pin: globalPin,
                 username: name,
-                avatar: "🐶", // 預設頭像
-                score: 0
+                avatar: "🐶"
             });
         }
 
-        socket.on('auth_success', user => {
-            const tag = document.getElementById('name-tag');
-            if (tag) tag.innerText = user.username;
-            switchView('v-lobby');
+        socket.on('auth_success', (user) => {
+            const nameDisplay = document.getElementById('display-username');
+            if (nameDisplay) nameDisplay.innerText = user.username;
+            goto('page-lobby');
+        });
+
+        socket.on('room_created', (rid) => {
+            alert("房間建立成功，房號：" + rid);
+            socket.emit('join_room', { roomId: rid });
+        });
+
+        socket.on('room_update', (room) => {
+            console.log("進入房間:", room.id);
+            // 這裡可以接著切換到遊戲選擇畫面
         });
     </script>
 </body>
