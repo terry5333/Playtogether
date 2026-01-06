@@ -60,3 +60,26 @@ io.on('connection', (socket) => {
 });
 
 server.listen(process.env.PORT || 3000);
+// 在伺服器端增加管理員 API
+io.on('connection', (socket) => {
+    // ... 原有的遊戲邏輯 ...
+
+    // 管理員登入
+    socket.on('admin_login', (adminPin) => {
+        if (adminPin === "9999") { // 假設管理員密碼是 9999
+            socket.emit('admin_auth_success', {
+                users: Object.values(memoryDB),
+                rooms: Object.values(rooms)
+            });
+        }
+    });
+
+    // 強制重置某玩家積分
+    socket.on('admin_update_score', ({ pin, newScore }) => {
+        if (memoryDB[pin]) {
+            memoryDB[pin].score = parseInt(newScore);
+            io.emit('rank_update', Object.values(memoryDB).sort((a,b)=>b.score-a.score).slice(0,5));
+            socket.emit('admin_action_done', "積分已更新");
+        }
+    });
+});
