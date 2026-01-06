@@ -3,172 +3,159 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PartyBox Pro Leaderboard</title>
+    <title>PartyBox Ultimate</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { background: #0f172a; color: white; font-family: sans-serif; }
-        .view { display: none; min-height: 100vh; padding: 1.5rem; flex-direction: column; }
+        body { background: #0f172a; color: white; font-family: sans-serif; overflow-x: hidden; }
+        .view { display: none; min-height: 100vh; flex-direction: column; }
         .view.active { display: flex; }
-        .glass { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(12px); }
-        .btn-cyan { background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); }
+        .glass { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
+        .chat-box::-webkit-scrollbar { width: 4px; }
+        .chat-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
     </style>
 </head>
 <body>
 
-    <section id="v-pin" class="view active items-center justify-center">
-        <h1 class="text-6xl font-black mb-8 italic text-cyan-400">PartyBox</h1>
-        <input id="i-pin" type="text" placeholder="4位 PIN" class="w-64 bg-white/5 p-5 rounded-3xl text-center text-3xl border-2 border-transparent focus:border-cyan-500 outline-none transition">
-        <button onclick="doCheck()" class="w-64 mt-6 btn-cyan p-5 rounded-3xl font-bold text-xl">開始</button>
+    <section id="v-pin" class="view active items-center justify-center p-6">
+        <h1 class="text-5xl font-black mb-10 text-transparent bg-clip-text bg-gradient-to-br from-cyan-400 to-blue-600 italic">PartyBox</h1>
+        <input id="i-pin" type="text" placeholder="輸入 4 位 PIN" class="w-full max-w-xs bg-white/5 p-5 rounded-3xl text-center text-3xl outline-none border border-white/10 focus:border-cyan-500 transition">
+        <button onclick="doLogin()" class="w-full max-w-xs mt-6 bg-cyan-600 p-5 rounded-3xl font-bold text-xl shadow-lg shadow-cyan-500/30">進入派對</button>
     </section>
 
-    <section id="v-setup" class="view items-center justify-center">
-        <div class="w-full max-w-sm glass p-8 rounded-[3rem] text-center">
-            <h2 class="text-2xl font-bold mb-8">設定你的角色</h2>
-            <input id="i-name" type="text" placeholder="暱稱" class="w-full bg-white/5 p-4 rounded-2xl text-center mb-8 outline-none border border-white/10">
-            <button onclick="doSave()" class="w-full btn-cyan p-4 rounded-2xl font-black">進入大廳</button>
+    <section id="v-lobby" class="view p-6">
+        <div class="flex justify-between items-center mb-8">
+            <h2 id="u-welcome" class="text-xl font-bold"></h2>
+            <span id="u-score" class="text-cyan-400 font-mono">0 pt</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="glass p-8 rounded-[2.5rem] text-center border-t border-white/20">
+                <h3 class="text-cyan-400 font-bold mb-4 italic">CREATE</h3>
+                <button onclick="socket.emit('create_room')" class="w-full py-6 rounded-3xl bg-white/5 border border-white/10 text-xl font-bold hover:bg-white/10 transition">建立新房間</button>
+            </div>
+            <div class="glass p-8 rounded-[2.5rem] text-center">
+                <h3 class="text-blue-400 font-bold mb-4 italic">JOIN</h3>
+                <input id="i-rid" type="text" placeholder="房號" class="w-full bg-white/5 p-4 rounded-2xl text-center text-2xl mb-4 border border-white/10 outline-none">
+                <button onclick="doJoin()" class="w-full py-4 rounded-2xl bg-blue-600 font-bold">加入房間</button>
+            </div>
         </div>
     </section>
 
-    <section id="v-lobby" class="view">
-        <div class="flex justify-between items-center mb-6">
-            <div id="u-display" class="font-bold text-lg"></div>
-            <div id="u-score" class="text-cyan-400">Score: 0</div>
+    <section id="v-room" class="view p-6">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <span class="text-slate-500 uppercase tracking-widest text-xs">Room ID</span>
+                <h2 id="r-id-display" class="text-4xl font-black text-cyan-400 font-mono">----</h2>
+            </div>
+            <button onclick="location.reload()" class="text-slate-500 text-sm">退出</button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
-            <div class="glass p-8 rounded-[2.5rem] flex flex-col items-center">
-                <h3 class="text-xl font-bold mb-6 text-cyan-400">建立房間</h3>
-                <div class="space-y-4 w-full">
-                    <button onclick="socket.emit('create_room')" class="w-full bg-white/5 border border-white/10 p-6 rounded-3xl text-lg hover:bg-white/10 transition">
-                        ✨ 建立新派對房
-                    </button>
-                    <p class="text-xs text-slate-500 text-center italic">建立後可選擇 誰是臥底、Bingo、記憶卡牌 或 你話我猜</p>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
+            <div class="glass rounded-[2rem] p-6">
+                <h4 class="text-sm font-bold text-slate-500 mb-4 uppercase">玩家列表</h4>
+                <div id="r-players" class="space-y-3"></div>
+            </div>
+
+            <div class="glass rounded-[2rem] p-6 flex flex-col h-[400px] lg:h-auto">
+                <h4 class="text-sm font-bold text-slate-500 mb-4 uppercase">即時聊天</h4>
+                <div id="r-chat" class="chat-box flex-1 overflow-y-auto mb-4 space-y-2"></div>
+                <div class="flex gap-2">
+                    <input id="i-chat" type="text" placeholder="輸入訊息..." class="flex-1 bg-white/5 p-3 rounded-xl outline-none border border-white/10">
+                    <button onclick="sendChat()" class="bg-cyan-600 px-4 rounded-xl">發送</button>
                 </div>
             </div>
 
-            <div class="glass p-8 rounded-[2.5rem] flex flex-col items-center">
-                <h3 class="text-xl font-bold mb-6 text-blue-400">加入房間</h3>
-                <input id="i-rid" type="text" placeholder="輸入 4 位房號" class="w-full bg-white/5 p-6 rounded-3xl text-center text-2xl mb-4 border border-white/10">
-                <button onclick="doJoin()" class="w-full bg-blue-600 p-5 rounded-3xl font-bold">加入</button>
-            </div>
-        </div>
-
-        <div class="mt-8 glass p-6 rounded-[2rem]">
-            <h3 class="text-center text-sm font-bold tracking-widest text-slate-500 mb-4 uppercase">🏆 全服積分排行榜</h3>
-            <div id="leaderboard" class="space-y-2">
+            <div id="r-host-panel" class="glass rounded-[2rem] p-6 hidden">
+                <h4 class="text-sm font-bold text-yellow-500 mb-4 uppercase">房主選項：選擇遊戲模式</h4>
+                <div class="grid grid-cols-1 gap-3">
+                    <button onclick="socket.emit('start_game','SPY')" class="p-4 bg-cyan-900/30 border border-cyan-500/30 rounded-2xl text-left hover:bg-cyan-500/20 transition">🕵️ 誰是臥底</button>
+                    <button onclick="socket.emit('start_game','MEMORY')" class="p-4 bg-purple-900/30 border border-purple-500/30 rounded-2xl text-left hover:bg-purple-500/20 transition">🧠 記憶卡牌</button>
+                    <button onclick="socket.emit('start_game','BINGO')" class="p-4 bg-orange-900/30 border border-orange-500/30 rounded-2xl text-left hover:bg-orange-500/20 transition">🔢 Bingo 連線</button>
+                    <button onclick="socket.emit('start_game','GUESS')" class="p-4 bg-blue-900/30 border border-blue-500/30 rounded-2xl text-left hover:bg-blue-500/20 transition">✍️ 你話我猜</button>
                 </div>
+            </div>
+            <div id="r-guest-hint" class="glass rounded-[2rem] p-6 flex items-center justify-center text-slate-500 italic text-center">
+                等待房主選擇遊戲模式...
+            </div>
         </div>
     </section>
 
-    <section id="v-play" class="view items-center">
-        <div id="g-header" class="text-center mb-4">
-            <h2 id="g-title" class="text-2xl font-bold text-cyan-400"></h2>
-            <p id="g-info" class="text-sm text-slate-400"></p>
-        </div>
-        <div id="g-ui" class="flex-1 w-full glass rounded-[3rem] p-6 flex items-center justify-center"></div>
-        <button onclick="go('v-lobby')" class="mt-4 text-slate-600 font-bold py-4">返回大廳</button>
+    <section id="v-play" class="view p-6 items-center justify-center">
+        <h2 id="play-title" class="text-3xl font-bold mb-10">遊戲開始</h2>
+        <div id="g-ui" class="w-full max-w-2xl glass rounded-[3rem] p-10 min-h-[300px] flex items-center justify-center"></div>
+        <button onclick="go('v-room')" class="mt-10 text-slate-500">返回房間</button>
     </section>
 
     <script>
         const socket = io();
-        let myUser, myPin, memoryCards=[], flipped=[];
+        let myUser, myPin;
 
         function go(id) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(id).classList.add('active');
         }
 
-        // 登入邏輯
-        function doCheck() {
+        function doLogin() {
             myPin = document.getElementById('i-pin').value;
-            if(myPin.length === 4) socket.emit('check_pin', myPin);
-        }
-
-        socket.on('pin_result', res => {
-            if(res.exists) socket.emit('save_profile', res.user);
-            else go('v-setup');
-        });
-
-        function doSave() {
-            const name = document.getElementById('i-name').value;
-            if(name) socket.emit('save_profile', { pin: myPin, username: name, avatar: '👤' });
+            if(myPin) socket.emit('save_profile', { pin: myPin, username: '玩家'+myPin, avatar: '👤' });
         }
 
         socket.on('auth_success', u => {
             myUser = u;
-            document.getElementById('u-display').innerText = u.username;
-            document.getElementById('u-score').innerText = `Score: ${u.score}`;
+            document.getElementById('u-welcome').innerText = `嗨, ${u.username}`;
+            document.getElementById('u-score').innerText = `${u.score} pt`;
             go('v-lobby');
         });
 
-        // 加入房間
         function doJoin() {
             const rid = document.getElementById('i-rid').value;
             if(rid) socket.emit('join_room', { roomId: rid, user: myUser });
         }
 
-        // 排行榜更新
-        socket.on('update_leaderboard', list => {
-            const container = document.getElementById('leaderboard');
-            container.innerHTML = list.map((p, i) => `
-                <div class="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
-                    <span class="font-bold text-slate-400">#${i+1} ${p.username}</span>
-                    <span class="text-cyan-400 font-mono font-bold">${p.score} pt</span>
+        // 房間數據更新
+        socket.on('room_data', data => {
+            go('v-room');
+            document.getElementById('r-id-display').innerText = data.room.id;
+            
+            // 更新玩家列表
+            const pList = document.getElementById('r-players');
+            pList.innerHTML = data.room.players.map(p => `
+                <div class="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/5">
+                    <span class="text-2xl">${p.avatar}</span>
+                    <span class="font-bold">${p.username}</span>
+                    ${p.socketId === data.room.host ? '<span class="text-[10px] bg-yellow-600 px-2 py-0.5 rounded-full ml-auto">HOST</span>' : ''}
                 </div>
             `).join('');
+
+            // 房主權限判斷
+            if(data.isHost) {
+                document.getElementById('r-host-panel').classList.remove('hidden');
+                document.getElementById('r-guest-hint').classList.add('hidden');
+            }
         });
 
-        // 記憶卡牌遊戲範例 (獲勝會觸發積分)
-        socket.on('game_init', data => {
+        // 聊天室邏輯
+        function sendChat() {
+            const input = document.getElementById('i-chat');
+            if(input.value) { socket.emit('send_msg', input.value); input.value = ''; }
+        }
+
+        socket.on('new_msg', data => {
+            const chat = document.getElementById('r-chat');
+            chat.innerHTML += `<div class="text-sm"><span class="text-cyan-500 font-bold">${data.user}:</span> <span class="text-slate-300">${data.text}</span></div>`;
+            chat.scrollTop = chat.scrollHeight;
+        });
+
+        // 遊戲切換
+        socket.on('goto_game', type => {
             go('v-play');
-            const ui = document.getElementById('g-ui');
-            if(data.type === 'MEMORY') {
-                document.getElementById('g-title').innerText = "記憶卡牌";
-                ui.className = "flex-1 w-full glass rounded-[3rem] grid grid-cols-4 gap-2 p-6";
-                memoryCards = data.cards;
-                memoryCards.forEach((icon, i) => {
-                    ui.innerHTML += `<button id="c-${i}" onclick="socket.emit('flip_card', ${i})" class="h-20 bg-white/10 rounded-2xl text-2xl flex items-center justify-center">?</button>`;
-                });
-            }
-        });
-
-        socket.on('on_flip', idx => {
-            const btn = document.getElementById(`c-${idx}`);
-            btn.innerText = memoryCards[idx];
-            btn.classList.add('bg-cyan-500/50');
-            flipped.push(idx);
-            if(flipped.length === 2) {
-                const [a, b] = flipped;
-                if(memoryCards[a] === memoryCards[b]) {
-                    setTimeout(() => {
-                        document.getElementById(`c-${a}`).style.opacity = '0.3';
-                        document.getElementById(`c-${b}`).style.opacity = '0.3';
-                        flipped=[];
-                        // 簡單檢查是否全對
-                        if(document.querySelectorAll('button[style*="opacity: 0.3"]').length === memoryCards.length) {
-                            socket.emit('game_win', { points: 20 });
-                        }
-                    }, 500);
-                } else {
-                    setTimeout(() => {
-                        document.getElementById(`c-${a}`).innerText='?'; 
-                        document.getElementById(`c-${b}`).innerText='?';
-                        document.getElementById(`c-${a}`).classList.remove('bg-cyan-500/50');
-                        document.getElementById(`c-${b}`).classList.remove('bg-cyan-500/50');
-                        flipped=[];
-                    }, 800);
-                }
-            }
-        });
-
-        socket.on('game_over', data => {
-            document.getElementById('g-info').innerText = `🎉 遊戲結束！贏家：${data.winner}`;
+            document.getElementById('play-title').innerText = type === 'SPY' ? "誰是臥底" : "準備中...";
+            document.getElementById('g-ui').innerHTML = `<p class="text-xl">遊戲模式：${type} 載入中...</p>`;
         });
 
         socket.on('room_created', rid => {
-            document.getElementById('i-rid').value = rid;
-            doJoin();
+            socket.emit('join_room', { roomId: rid, user: myUser });
         });
     </script>
 </body>
