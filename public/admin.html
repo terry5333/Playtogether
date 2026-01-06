@@ -2,26 +2,41 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PartyBox Admin</title>
+    <title>Admin Panel</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
-<body class="bg-slate-950 text-slate-200 p-8 font-sans">
-    <div class="max-w-7xl mx-auto space-y-10">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-6">
-            <h1 class="text-3xl font-black">SYSTEM <span class="text-indigo-500">ADMIN</span></h1>
+<body class="bg-slate-950 text-slate-200 p-6 font-sans">
+    <div class="grid lg:grid-cols-3 gap-6">
+        
+        <div class="lg:col-span-2 bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-2xl">
+            <h2 class="text-xl font-bold mb-6 flex justify-between items-center">
+                <span>👥 玩家狀態清單</span>
+                <span class="text-xs text-slate-500 font-normal">實時同步中...</span>
+            </h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="text-slate-500 border-b border-slate-800">
+                            <th class="pb-4">玩家</th>
+                            <th class="pb-4">PIN 碼</th>
+                            <th class="pb-4">目前房號</th>
+                            <th class="pb-4 text-right">總積分</th>
+                        </tr>
+                    </thead>
+                    <tbody id="u-list" class="divide-y divide-slate-800"></tbody>
+                </table>
+            </div>
         </div>
 
-        <div class="grid lg:grid-cols-2 gap-10">
-            <div class="bg-slate-900 rounded-[2rem] p-6 border border-slate-800">
-                <h2 class="text-xl font-bold mb-6">🏆 全球戰績與 PIN 碼</h2>
-                <div id="user-list" class="space-y-3 max-h-[600px] overflow-y-auto pr-2"></div>
-            </div>
+        <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800">
+            <h2 class="text-xl font-bold mb-6 text-emerald-400">📜 歷史戰績</h2>
+            <div id="h-list" class="space-y-3"></div>
+        </div>
 
-            <div class="bg-slate-900 rounded-[2rem] p-6 border border-slate-800">
-                <h2 class="text-xl font-bold mb-6">🎮 即時房間監控</h2>
-                <div id="room-monitor" class="space-y-4"></div>
-            </div>
+        <div class="lg:col-span-3 bg-slate-900 p-6 rounded-3xl border border-slate-800">
+            <h2 class="text-xl font-bold mb-6 text-orange-400">🎮 房間監控</h2>
+            <div id="r-list" class="grid md:grid-cols-4 gap-4"></div>
         </div>
     </div>
 
@@ -30,46 +45,40 @@
         socket.emit('admin_init');
 
         socket.on('admin_full_update', data => {
-            // 渲染玩家列表
-            const uList = document.getElementById('user-list');
-            uList.innerHTML = data.users.map(u => `
-                <div class="flex justify-between items-center bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">${u.avatar}</span>
-                        <div>
-                            <div class="font-bold text-white text-sm">${u.username}</div>
-                            <div class="text-[10px] text-indigo-400 font-mono">PIN: ${u.pin}</div>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-4">
-                        <span class="text-yellow-500 font-black text-xs">${u.score} pt</span>
-                        <button onclick="if(confirm('確定刪除？')) socket.emit('admin_delete_user','${u._id}')" 
-                                class="text-red-500 text-[10px] font-bold hover:underline">刪除</button>
-                    </div>
-                </div>
+            // 更新玩家清單
+            document.getElementById('u-list').innerHTML = data.users.map(u => `
+                <tr class="hover:bg-slate-800/50">
+                    <td class="py-4 font-bold">${u.avatar} ${u.username}</td>
+                    <td class="font-mono text-indigo-400 font-bold">${u.pin}</td>
+                    <td>
+                        <span class="${u.currentRoom === '大廳' ? 'text-slate-600' : 'text-green-400 font-black'}">
+                            ${u.currentRoom === '大廳' ? '● 大廳' : '🏠 房 #' + u.currentRoom}
+                        </span>
+                    </td>
+                    <td class="text-right text-yellow-500 font-black text-lg">${u.score}</td>
+                </tr>
             `).join('');
 
-            // 渲染房間列表
-            const rMon = document.getElementById('room-monitor');
-            if(data.rooms.length === 0) {
-                rMon.innerHTML = `<div class="text-center py-20 text-slate-600 italic">目前無進行中房間</div>`;
-                return;
-            }
-            rMon.innerHTML = data.rooms.map(r => `
-                <div class="bg-slate-800 p-5 rounded-3xl border border-indigo-500/30">
-                    <div class="flex justify-between items-center mb-4">
-                        <span class="bg-indigo-600 text-white text-xs font-black px-3 py-1 rounded-lg">ROOM #${r.id}</span>
-                        <button onclick="socket.emit('admin_close_room','${r.id}')" 
-                                class="bg-red-500/10 text-red-500 text-[10px] px-2 py-1 rounded-md border border-red-500/20">關閉房間</button>
+            // 更新歷史紀錄
+            document.getElementById('h-list').innerHTML = data.history.length ? data.history.map(h => `
+                <div class="bg-slate-800 p-3 rounded-2xl border-l-4 border-emerald-500 text-xs">
+                    <div class="flex justify-between font-bold mb-1">
+                        <span>${h.game}</span>
+                        <span class="text-slate-500">${h.time}</span>
                     </div>
-                    <div class="grid grid-cols-2 gap-2">
-                        ${r.players.map(p => `
-                            <div class="bg-slate-900 p-2 rounded-xl flex justify-between items-center border border-slate-700/50">
-                                <span class="text-[10px] font-bold">${p.avatar} ${p.username}</span>
-                                <button onclick="socket.emit('admin_kick_player',{roomId:'${r.id}',socketId:'${p.socketId}'})" 
-                                        class="text-orange-500 text-[10px] hover:text-white">踢出</button>
-                            </div>
-                        `).join('')}
+                    <div>👑 贏家: <span class="text-white">${h.winner}</span></div>
+                </div>
+            `).join('') : '<div class="text-slate-600 italic py-10 text-center">暫無紀錄</div>';
+
+            // 更新房間
+            document.getElementById('r-list').innerHTML = data.rooms.map(r => `
+                <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700">
+                    <div class="flex justify-between items-center mb-3">
+                        <b class="text-orange-400">房號 #${r.id}</b>
+                        <button onclick="socket.emit('admin_close_room','${r.id}')" class="text-[10px] bg-red-500/20 text-red-500 px-2 py-1 rounded">強制解散</button>
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                        ${r.players.map(p => `<span class="text-[9px] bg-slate-900 px-2 py-1 rounded border border-slate-700">${p.avatar} ${p.username}</span>`).join('')}
                     </div>
                 </div>
             `).join('');
