@@ -72,3 +72,46 @@ io.on('connection', (socket) => {
 });
 
 server.listen(process.env.PORT || 3000, () => console.log('PartyBox Server Ready'));
+// 擴展詞庫
+const spyLibrary = [
+    ['蘋果', '梨子'], ['醫生', '護士'], ['火鍋', '燒烤'], ['咖啡', '奶茶'],
+    ['相機', '手機'], ['操場', '公園'], ['自行車', '摩托車'], ['鋼琴', '小提琴']
+];
+
+io.on('connection', (socket) => {
+    // 房主發送設定參數 (秒數、回合、連線數)
+    socket.on('set_game_config', (config) => {
+        const r = rooms[socket.roomId];
+        if (r && r.hostPin === socket.userPin) {
+            r.config = config; // 儲存設定
+            io.to(socket.roomId).emit('game_ready_to_start', config);
+        }
+    });
+
+    // --- 誰是臥底邏輯 ---
+    socket.on('start_spy_game', () => {
+        const r = rooms[socket.roomId];
+        const pair = spyLibrary[Math.floor(Math.random() * spyLibrary.length)];
+        const spyIdx = Math.floor(Math.random() * r.players.length);
+        
+        r.players.forEach((p, i) => {
+            const role = (i === spyIdx) ? '臥底' : '平民';
+            const word = (i === spyIdx) ? pair[1] : pair[0];
+            io.to(p.socketId).emit('game_init', { type: 'SPY', word, role, timer: r.config.timer });
+        });
+    });
+
+    // --- Bingo 邏輯 ---
+    socket.on('bingo_call', (num) => {
+        io.to(socket.roomId).emit('bingo_sync_num', num);
+    });
+
+    // --- 積分結算 ---
+    socket.on('claim_win', (points) => {
+        if (memoryDB[socket.userPin]) {
+            memoryDB[socket.userPin].score += points;
+            io.emit('rank_update', Object.values(memoryDB).sort((a,b)=>b.score-a.score).slice(0,5));
+            io.to(socket.roomId).emit('announcement', `${memoryDB[socket.userPin].username} 獲得了勝利！`);
+        }
+    });
+});
