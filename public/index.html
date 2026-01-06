@@ -7,239 +7,119 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { background: #0f172a; color: white; font-family: sans-serif; overflow: hidden; }
+        body { background: #020617; color: white; font-family: sans-serif; overflow: hidden; }
         .view { display: none; min-height: 100vh; flex-direction: column; padding: 1.5rem; }
         .active { display: flex; }
-        .glass { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
-        .av-btn { border: 2px solid transparent; border-radius: 1rem; transition: 0.3s; }
-        .av-active { border-color: #06b6d4; background: rgba(6, 182, 212, 0.2); }
+        .glass { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(15px); }
     </style>
 </head>
 <body>
 
     <section id="v-pin" class="view active items-center justify-center">
-        <h1 class="text-6xl font-black mb-10 italic text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600">PartyBox</h1>
-        <input id="i-pin" type="text" maxlength="4" placeholder="輸入 4 位 PIN" class="w-full max-w-xs bg-white/5 p-5 rounded-3xl text-center text-4xl border border-white/10 outline-none focus:border-cyan-500 transition font-mono">
-        <button onclick="checkPin()" class="w-full max-w-xs mt-6 bg-cyan-600 p-5 rounded-3xl font-bold text-xl active:scale-95 transition">開始</button>
+        <h1 class="text-6xl font-black mb-10 italic text-cyan-500">PartyBox</h1>
+        <input id="i-pin" type="text" maxlength="4" placeholder="PIN" class="w-full max-w-xs bg-white/5 p-5 rounded-3xl text-center text-4xl outline-none border border-white/10 focus:border-cyan-500 transition">
+        <button onclick="doCheck()" class="w-full max-w-xs mt-6 bg-cyan-600 p-5 rounded-3xl font-bold">進入</button>
     </section>
 
     <section id="v-setup" class="view items-center justify-center">
-        <div class="w-full max-w-sm glass p-8 rounded-[2.5rem] text-center">
-            <h2 class="text-2xl font-bold mb-8">設定你的角色</h2>
-            <div class="grid grid-cols-4 gap-2 mb-8">
-                <button onclick="selAv('🐶', this)" class="av-btn p-2 text-3xl av-active">🐶</button>
-                <button onclick="selAv('🦊', this)" class="av-btn p-2 text-3xl">🦊</button>
-                <button onclick="selAv('🐷', this)" class="av-btn p-2 text-3xl">🐷</button>
-                <button onclick="selAv('🐵', this)" class="av-btn p-2 text-3xl">🐵</button>
+        <div class="w-full max-w-sm glass p-8 rounded-[3rem] text-center">
+            <h2 class="text-2xl font-bold mb-6">設定角色</h2>
+            <div class="grid grid-cols-4 gap-2 mb-6">
+                <button onclick="selAv('🐶', this)" class="av-btn p-3 text-2xl border-2 border-transparent rounded-xl">🐶</button>
+                <button onclick="selAv('🐱', this)" class="av-btn p-3 text-2xl border-2 border-transparent rounded-xl">🐱</button>
+                <button onclick="selAv('🦊', this)" class="av-btn p-3 text-2xl border-2 border-transparent rounded-xl">🦊</button>
+                <button onclick="selAv('🐷', this)" class="av-btn p-3 text-2xl border-2 border-transparent rounded-xl">🐷</button>
             </div>
-            <input id="i-name" type="text" placeholder="輸入暱稱" class="w-full bg-white/5 p-4 rounded-2xl text-center text-xl mb-8 outline-none border border-white/10">
-            <button onclick="saveProfile()" class="w-full bg-white text-slate-900 p-4 rounded-2xl font-black text-lg">確認進入</button>
+            <input id="i-name" type="text" placeholder="暱稱" class="w-full bg-white/5 p-4 rounded-xl text-center mb-6 outline-none border border-white/10">
+            <button onclick="doSave()" class="w-full bg-cyan-500 p-4 rounded-xl font-bold">確認</button>
         </div>
     </section>
 
     <section id="v-lobby" class="view">
-        <div class="flex justify-between items-center mb-8">
-            <div id="u-info" class="text-lg font-bold"></div>
-            <div id="u-score" class="text-cyan-400 font-mono">0 pt</div>
+        <div class="flex justify-between items-center mb-6">
+            <span id="u-display" class="font-bold"></span>
+            <button onclick="localStorage.clear(); location.reload();" class="text-xs text-slate-500">登出</button>
         </div>
-        <div class="grid grid-cols-2 gap-4 mb-8">
-            <button onclick="socket.emit('create_room')" class="glass p-8 rounded-3xl text-center border-t border-cyan-500/30">
-                <div class="text-3xl mb-2">✨</div><div class="font-bold">建立房間</div>
-            </button>
-            <div class="glass p-4 rounded-3xl">
-                <input id="i-rid" type="text" placeholder="房號" class="w-full bg-white/5 p-2 rounded-xl text-center mb-2 outline-none">
-                <button onclick="joinRoom()" class="w-full bg-blue-600 py-2 rounded-xl text-sm font-bold">加入</button>
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <button onclick="socket.emit('create_room', myUser)" class="glass p-6 rounded-3xl text-center border-t border-cyan-500/30">建立房間</button>
+            <div class="glass p-2 rounded-3xl">
+                <input id="i-rid" type="text" placeholder="房號" class="w-full bg-transparent p-2 text-center outline-none">
+                <button onclick="doJoin()" class="w-full bg-blue-600 py-2 rounded-xl text-xs font-bold">加入</button>
             </div>
         </div>
-        <div class="glass flex-1 rounded-3xl p-6">
-            <h3 class="text-slate-500 text-xs font-bold uppercase mb-4 tracking-widest text-center">🏆 全服排行榜</h3>
-            <div id="leaderboard" class="space-y-3"></div>
+        <div class="glass flex-1 rounded-3xl p-6 overflow-y-auto">
+            <h3 class="text-center text-xs text-slate-500 mb-4 font-bold tracking-widest">RANKING</h3>
+            <div id="leaderboard" class="space-y-2"></div>
         </div>
     </section>
 
     <section id="v-room" class="view">
-        <div class="flex justify-between items-center mb-10">
-            <div>
-                <p class="text-slate-500 text-xs uppercase tracking-widest">Room ID</p>
-                <h2 id="r-id" class="text-4xl font-black text-cyan-400">----</h2>
-            </div>
-            <button onclick="location.reload()" class="text-slate-500 text-sm">離開</button>
+        <div class="flex justify-between items-center mb-6">
+            <h2 id="r-id-ui" class="text-4xl font-black text-cyan-400 font-mono">----</h2>
+            <button onclick="go('v-lobby')" class="text-slate-500">退出</button>
         </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+        <div class="grid grid-cols-1 gap-6 flex-1">
             <div class="glass p-6 rounded-[2rem]">
-                <h4 class="text-slate-500 text-xs font-bold mb-4 uppercase">成員列表</h4>
+                <h4 class="text-[10px] text-slate-500 mb-4 font-bold">PLAYER LIST</h4>
                 <div id="r-players" class="space-y-2"></div>
             </div>
-            
-            <div id="admin-controls" class="hidden glass p-6 rounded-[2rem] border-2 border-cyan-500/20">
-                <h4 class="text-cyan-500 text-xs font-bold mb-6 uppercase">管理員後台：選擇遊戲模式</h4>
-                <div class="grid grid-cols-1 gap-3 text-sm">
-                    <button onclick="socket.emit('start_game','SPY')" class="bg-white/5 p-4 rounded-2xl text-left border border-white/5 hover:border-cyan-500 transition">🕵️ 誰是臥底</button>
-                    <button onclick="socket.emit('start_game','MEMORY')" class="bg-white/5 p-4 rounded-2xl text-left border border-white/5 hover:border-cyan-500 transition">🧠 記憶卡牌</button>
-                    <button onclick="socket.emit('start_game','BINGO')" class="bg-white/5 p-4 rounded-2xl text-left border border-white/5 hover:border-cyan-500 transition">🔢 Bingo 連線</button>
-                    <button onclick="socket.emit('start_game','GUESS')" class="bg-white/5 p-4 rounded-2xl text-left border border-white/5 hover:border-cyan-500 transition">✍️ 你話我猜</button>
+            <div id="admin-panel" class="hidden glass p-6 rounded-[2rem] border border-yellow-500/20">
+                <h4 class="text-[10px] text-yellow-500 mb-4 font-bold uppercase">Admin Console</h4>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="socket.emit('start_game','MEMORY')" class="bg-white/5 p-3 rounded-xl text-xs border border-white/5">🧠 記憶卡牌</button>
+                    <button onclick="socket.emit('start_game','SPY')" class="bg-white/5 p-3 rounded-xl text-xs border border-white/5">🕵️ 誰是臥底</button>
                 </div>
             </div>
-
-            <div id="guest-waiting" class="glass p-6 rounded-[2rem] flex flex-col items-center justify-center text-slate-500 italic">
-                <div class="animate-pulse mb-2 text-3xl">⏳</div>
-                等待管理員啟動遊戲...
-            </div>
+            <div id="guest-hint" class="text-center text-slate-500 italic text-sm py-10">等待房主啟動遊戲...</div>
         </div>
     </section>
 
     <script>
         const socket = io();
-        let myUser, myPin, myAv = '🐶';
+        let myUser, myPin, myAv='🐶';
 
-        function go(id) {
-            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-        }
+        // 重新整理自動登入
+        window.onload = () => {
+            const saved = localStorage.getItem('party_pin');
+            if (saved) socket.emit('check_pin', saved);
+            else go('v-pin');
+        };
 
-        function selAv(av, el) {
-            myAv = av;
-            document.querySelectorAll('.av-btn').forEach(b => b.classList.remove('av-active'));
-            el.classList.add('av-active');
-        }
+        function go(id) { document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+        function selAv(av, el) { myAv=av; document.querySelectorAll('.av-btn').forEach(b=>b.classList.remove('border-cyan-500')); el.classList.add('border-cyan-500'); }
+        
+        function doCheck() { myPin=document.getElementById('i-pin').value; if(myPin) { localStorage.setItem('party_pin', myPin); socket.emit('check_pin', myPin); } }
+        function doSave() { const n=document.getElementById('i-name').value; if(n) socket.emit('save_profile', {pin:myPin, username:n, avatar:myAv}); }
+        function doJoin() { const r=document.getElementById('i-rid').value; if(r) socket.emit('join_room', {roomId:r, user:myUser}); }
 
-        function checkPin() {
-            myPin = document.getElementById('i-pin').value;
-            if (myPin.length === 4) socket.emit('check_pin', myPin);
-        }
+        socket.on('pin_result', res => { if(res.exists) socket.emit('save_profile', res.user); else go('v-setup'); });
+        socket.on('auth_success', u => { myUser=u; document.getElementById('u-display').innerText=`${u.avatar} ${u.username}`; go('v-lobby'); });
 
-        socket.on('pin_result', res => {
-            if (res.exists) {
-                // 如果玩家已存在，直接進大廳
-                socket.emit('save_profile', res.user);
-            } else {
-                // 如果是新玩家，跳到設定頁
-                go('v-setup');
-            }
-        });
-
-        function saveProfile() {
-            const name = document.getElementById('i-name').value;
-            if (!name) return;
-            socket.emit('save_profile', { pin: myPin, username: name, avatar: myAv });
-        }
-
-        socket.on('auth_success', u => {
-            myUser = u;
-            document.getElementById('u-info').innerText = `${u.avatar} ${u.username}`;
-            document.getElementById('u-score').innerText = `${u.score} pt`;
-            go('v-lobby');
-        });
-
-        function joinRoom() {
-            const rid = document.getElementById('i-rid').value;
-            if (rid) socket.emit('join_room', { roomId: rid, user: myUser });
-        }
-
-        socket.on('room_update', data => {
+        socket.on('room_sync', data => {
             go('v-room');
-            document.getElementById('r-id').innerText = data.room.id;
-            
-            // 顯示玩家列表
+            document.getElementById('r-id-ui').innerText = data.room.id;
             document.getElementById('r-players').innerHTML = data.room.players.map(p => `
-                <div class="flex items-center gap-3 bg-white/5 p-3 rounded-2xl">
-                    <span class="text-2xl">${p.avatar}</span>
-                    <span class="font-bold">${p.username}</span>
-                </div>
-            `).join('');
-
-            // 管理員權限判斷
-            if (data.isAdmin) {
-                document.getElementById('admin-controls').classList.remove('hidden');
-                document.getElementById('guest-waiting').classList.add('hidden');
-            } else {
-                document.getElementById('admin-controls').classList.add('hidden');
-                document.getElementById('guest-waiting').classList.remove('hidden');
+                <div class="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/5">
+                    <span>${p.avatar}</span><span class="font-bold flex-1">${p.username}</span>
+                    ${p.pin === data.hostPin ? '<span class="text-[8px] bg-yellow-600 px-2 rounded-full">ADMIN</span>' : ''}
+                </div>`).join('');
+            
+            // 權限判定
+            if(myUser.pin === data.hostPin) {
+                document.getElementById('admin-panel').classList.remove('hidden');
+                document.getElementById('guest-hint').classList.add('hidden');
             }
         });
 
         socket.on('rank_update', list => {
-            document.getElementById('leaderboard').innerHTML = list.map((p, i) => `
-                <div class="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
-                    <span class="text-slate-400 font-bold">#${i+1} ${p.username}</span>
-                    <span class="text-cyan-400 font-mono">${p.score} pt</span>
-                </div>
-            `).join('');
+            document.getElementById('leaderboard').innerHTML = list.map((p,i)=>`
+                <div class="flex justify-between p-3 bg-white/5 rounded-xl text-sm">
+                    <span class="text-slate-500">#${i+1} ${p.username}</span><span class="text-cyan-400">${p.score} pt</span>
+                </div>`).join('');
         });
 
-        socket.on('room_created', rid => {
-            socket.emit('join_room', { roomId: rid, user: myUser });
-        });
-        
-        socket.on('goto_game', type => {
-            // 這裡接入你之前的遊戲邏輯...
-            alert('遊戲開始：' + type);
-        });
+        socket.on('room_created', rid => socket.emit('join_room', {roomId: rid, user: myUser}));
+        socket.on('goto_game', data => alert('遊戲開始：' + data.type));
     </script>
 </body>
 </html>
-<script>
-    const socket = io();
-    let myUser, myPin;
-
-    // --- 解決問題 1：重新整理自動登入 ---
-    window.onload = () => {
-        const savedPin = localStorage.getItem('party_pin');
-        if (savedPin) {
-            // 如果有舊 PIN，直接自動檢查並登入
-            myPin = savedPin;
-            socket.emit('check_pin', savedPin);
-        }
-    };
-
-    function doLogin() {
-        myPin = document.getElementById('i-pin').value;
-        if (myPin) {
-            localStorage.setItem('party_pin', myPin); // 存入本地
-            socket.emit('check_pin', myPin);
-        }
-    }
-
-    socket.on('pin_result', res => {
-        if (res.exists) {
-            socket.emit('save_profile', res.user);
-        } else {
-            go('v-setup'); // 新用戶去設定頁
-        }
-    });
-
-    socket.on('auth_success', u => {
-        myUser = u;
-        // 更新大廳顯示...
-        go('v-lobby');
-    });
-
-    // --- 解決問題 2：房主權限同步修復 ---
-    socket.on('room_sync', data => {
-        go('v-room');
-        document.getElementById('r-id-display').innerText = data.room.id;
-        
-        // 更新成員列表
-        const pList = document.getElementById('r-players');
-        pList.innerHTML = data.room.players.map(p => `
-            <div class="p-3 bg-white/5 rounded-xl flex items-center gap-2">
-                <span>${p.avatar}</span>
-                <span class="font-bold">${p.username}</span>
-            </div>
-        `).join('');
-
-        // 【關鍵】比對目前的 Socket ID 是否等於伺服器記錄的 Host ID
-        if (socket.id === data.hostSocketId) {
-            // 我是房主：顯示管理員面板
-            document.getElementById('admin-panel').classList.remove('hidden');
-            document.getElementById('guest-hint').classList.add('hidden');
-        } else {
-            // 我是客人：隱藏管理面板
-            document.getElementById('admin-panel').classList.add('hidden');
-            document.getElementById('guest-hint').classList.remove('hidden');
-        }
-    });
-
-    // ... 其他邏輯 ...
-</script>
