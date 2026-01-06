@@ -8,17 +8,17 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// --- 重要：解決 Admin 頁面進入點 ---
+// 路由：進入 Admin 管理後台
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 let memoryDB = {}; 
 let rooms = {};
-const spyLibrary = [['蘋果', '梨子'], ['醫生', '護士'], ['火鍋', '燒烤'], ['珍珠奶茶', '絲襪奶茶']];
+const spyWords = [['蘋果', '梨子'], ['醫生', '護士'], ['火鍋', '燒烤'], ['咖啡', '奶茶']];
 
 io.on('connection', (socket) => {
-    // 登入與房間邏輯
+    // 基礎 PIN 登入
     socket.on('check_pin', (pin) => {
         socket.emit('pin_result', { exists: !!memoryDB[pin], user: memoryDB[pin] });
     });
@@ -29,6 +29,7 @@ io.on('connection', (socket) => {
         socket.emit('auth_success', memoryDB[data.pin]);
     });
 
+    // 房間邏輯
     socket.on('create_room', (user) => {
         const rid = Math.floor(1000 + Math.random() * 9000).toString();
         rooms[rid] = { id: rid, hostPin: user.pin, players: [] };
@@ -36,27 +37,28 @@ io.on('connection', (socket) => {
     });
 
     socket.on('join_room', (data) => {
-        if (rooms[data.roomId]) {
+        const r = rooms[data.roomId];
+        if (r) {
             socket.join(data.roomId);
             socket.roomId = data.roomId;
-            if (!rooms[data.roomId].players.find(p => p.pin === data.user.pin)) {
-                rooms[data.roomId].players.push({ ...data.user, socketId: socket.id });
+            if (!r.players.find(p => p.pin === data.user.pin)) {
+                r.players.push({ ...data.user, socketId: socket.id });
             }
-            io.to(data.roomId).emit('room_sync', { room: rooms[data.roomId], hostPin: rooms[data.roomId].hostPin });
+            io.to(data.roomId).emit('room_sync', { room: r, hostPin: r.hostPin });
         }
     });
 
-    // --- 遊戲啟動控制 ---
+    // 啟動遊戲設定
     socket.on('confirm_start', (data) => {
         const r = rooms[socket.roomId];
-        if (!r || r.hostPin !== socket.userPin) return;
+        if (!r) return;
 
         if (data.mode === 'SPY') {
-            const pair = spyLibrary[Math.floor(Math.random() * spyLibrary.length)];
+            const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
             const spyIdx = Math.floor(Math.random() * r.players.length);
             r.players.forEach((p, i) => {
                 io.to(p.socketId).emit('game_init', { 
-                    type: 'SPY', word: (i===spyIdx?pair[1]:pair[0]), role: (i===spyIdx?'臥底':'平民'), timer: data.val 
+                    type: 'SPY', word: (i === spyIdx ? pair[1] : pair[0]), role: (i === spyIdx ? '臥底' : '平民'), timer: data.val 
                 });
             });
         } else if (data.mode === 'BINGO') {
@@ -65,9 +67,6 @@ io.on('connection', (socket) => {
             io.to(socket.roomId).emit('game_init', { type: 'GUESS', rounds: data.val });
         }
     });
-
-    // 同步畫布與遊戲動作
-    socket.on('draw_data', (pos) => socket.to(socket.roomId).emit('on_draw', pos));
 });
 
-server.listen(process.env.PORT || 3000, () => console.log('Server Ready'));
+server.listen(process.env.PORT || 3000);
