@@ -179,3 +179,67 @@
     </script>
 </body>
 </html>
+<script>
+    const socket = io();
+    let myUser, myPin;
+
+    // --- 解決問題 1：重新整理自動登入 ---
+    window.onload = () => {
+        const savedPin = localStorage.getItem('party_pin');
+        if (savedPin) {
+            // 如果有舊 PIN，直接自動檢查並登入
+            myPin = savedPin;
+            socket.emit('check_pin', savedPin);
+        }
+    };
+
+    function doLogin() {
+        myPin = document.getElementById('i-pin').value;
+        if (myPin) {
+            localStorage.setItem('party_pin', myPin); // 存入本地
+            socket.emit('check_pin', myPin);
+        }
+    }
+
+    socket.on('pin_result', res => {
+        if (res.exists) {
+            socket.emit('save_profile', res.user);
+        } else {
+            go('v-setup'); // 新用戶去設定頁
+        }
+    });
+
+    socket.on('auth_success', u => {
+        myUser = u;
+        // 更新大廳顯示...
+        go('v-lobby');
+    });
+
+    // --- 解決問題 2：房主權限同步修復 ---
+    socket.on('room_sync', data => {
+        go('v-room');
+        document.getElementById('r-id-display').innerText = data.room.id;
+        
+        // 更新成員列表
+        const pList = document.getElementById('r-players');
+        pList.innerHTML = data.room.players.map(p => `
+            <div class="p-3 bg-white/5 rounded-xl flex items-center gap-2">
+                <span>${p.avatar}</span>
+                <span class="font-bold">${p.username}</span>
+            </div>
+        `).join('');
+
+        // 【關鍵】比對目前的 Socket ID 是否等於伺服器記錄的 Host ID
+        if (socket.id === data.hostSocketId) {
+            // 我是房主：顯示管理員面板
+            document.getElementById('admin-panel').classList.remove('hidden');
+            document.getElementById('guest-hint').classList.add('hidden');
+        } else {
+            // 我是客人：隱藏管理面板
+            document.getElementById('admin-panel').classList.add('hidden');
+            document.getElementById('guest-hint').classList.remove('hidden');
+        }
+    });
+
+    // ... 其他邏輯 ...
+</script>
