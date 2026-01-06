@@ -1,97 +1,75 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PartyBox 遊戲系統</title>
+    <title>PartyBox</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>.hidden { display: none; }</style>
 </head>
-<body class="bg-slate-100 min-h-screen flex items-center justify-center p-6">
+<body class="bg-indigo-50 min-h-screen flex items-center justify-center p-6 text-slate-700">
 
-    <section id="step-pin" class="bg-white p-8 rounded-[2.5rem] shadow-xl w-full max-w-sm text-center space-y-6">
-        <h1 class="text-3xl font-black text-indigo-600">PartyBox</h1>
-        <div class="space-y-2">
-            <p class="text-sm text-slate-400 font-bold uppercase tracking-widest">請輸入 4 位數 PIN</p>
-            <input id="pin-input" type="number" placeholder="0000" class="w-full text-center text-4xl tracking-[0.5rem] p-4 bg-slate-50 rounded-2xl outline-none border-2 border-transparent focus:border-indigo-400">
-        </div>
-        <button onclick="checkPin()" class="w-full p-4 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg hover:bg-indigo-700 transition">確定</button>
+    <section id="step-pin" class="bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-sm text-center space-y-6">
+        <h1 class="text-3xl font-black text-indigo-500 italic">PartyBox</h1>
+        <input id="pin-in" type="number" placeholder="4位數PIN" class="w-full text-center text-4xl p-4 bg-slate-100 rounded-2xl outline-none border-2 border-transparent focus:border-indigo-400">
+        <button onclick="checkPin()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-2xl shadow-lg">確定</button>
     </section>
 
-    <section id="step-profile" class="hidden bg-white p-8 rounded-[2.5rem] shadow-xl w-full max-w-sm text-center space-y-6">
-        <h2 class="text-xl font-bold text-slate-700">設定你的角色</h2>
-        <div class="flex justify-center gap-4">
-            <button onclick="selAv('🐶', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-indigo-600">🐶</button>
+    <section id="step-profile" class="hidden bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-sm text-center space-y-6">
+        <h2 class="text-xl font-bold">設定你的頭像與暱稱</h2>
+        <div class="flex justify-center gap-2">
+            <button onclick="selAv('🐶', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-indigo-500">🐶</button>
             <button onclick="selAv('🐱', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-transparent">🐱</button>
             <button onclick="selAv('🦊', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-transparent">🦊</button>
         </div>
-        <input id="name-input" type="text" placeholder="輸入暱稱" class="w-full p-4 bg-slate-50 rounded-2xl text-center font-bold outline-none">
-        <button onclick="saveProfile()" class="w-full p-4 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg">進入系統</button>
+        <input id="name-in" type="text" placeholder="你的暱稱" class="w-full p-4 bg-slate-100 rounded-2xl text-center font-bold outline-none">
+        <button onclick="saveProfile()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-2xl shadow-lg">完成設定</button>
     </section>
 
-    <section id="step-lobby" class="hidden bg-white p-8 rounded-[2.5rem] shadow-xl w-full max-w-sm text-center space-y-8">
-        <div class="flex items-center justify-center gap-3">
-            <span id="display-av" class="text-3xl"></span>
-            <span id="display-name" class="text-xl font-bold"></span>
-        </div>
-        <div class="grid grid-cols-1 gap-4">
-            <button onclick="socket.emit('create_room')" class="p-6 bg-indigo-600 text-white rounded-3xl font-bold shadow-md hover:scale-105 transition text-lg">✨ 建立房間</button>
-            <div class="relative">
-                <input id="join-id" type="number" placeholder="輸入 4 位房號" class="w-full p-6 bg-slate-50 rounded-3xl text-center font-bold outline-none border-2 border-transparent focus:border-indigo-400">
-                <button onclick="joinRoom()" class="mt-2 w-full p-3 bg-slate-200 text-slate-600 rounded-2xl font-bold">加入房間</button>
-            </div>
+    <section id="step-lobby" class="hidden bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-sm text-center space-y-6">
+        <div class="text-2xl font-bold text-indigo-500" id="welcome"></div>
+        <button onclick="socket.emit('create_room')" class="w-full p-6 bg-indigo-500 text-white rounded-3xl font-bold shadow-lg text-lg">✨ 建立房間</button>
+        <div class="space-y-2">
+            <input id="rid-in" type="number" placeholder="輸入4位房號" class="w-full p-4 bg-slate-100 rounded-2xl text-center outline-none">
+            <button onclick="joinRoom()" class="w-full p-3 bg-slate-200 text-slate-600 rounded-2xl font-bold">加入房間</button>
         </div>
     </section>
 
     <script>
         const socket = io();
-        let myPin = '', myAvatar = '🐶';
+        let myPin = '', myAvatar = '🐶', myUser = null;
 
-        function showStep(id) {
-            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-            document.getElementById(id).classList.remove('hidden');
-        }
-
-        function selAv(av, el) {
-            myAvatar = av;
-            document.querySelectorAll('.av-btn').forEach(b => b.classList.replace('border-indigo-600', 'border-transparent'));
-            el.classList.replace('border-transparent', 'border-indigo-600');
-        }
+        function v(id) { document.querySelectorAll('section').forEach(s => s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
+        function selAv(av, el) { myAvatar = av; document.querySelectorAll('.av-btn').forEach(b => b.classList.replace('border-indigo-500', 'border-transparent')); el.classList.replace('border-transparent', 'border-indigo-500'); }
 
         function checkPin() {
-            myPin = document.getElementById('pin-input').value;
-            if(myPin.length !== 4) return alert("請輸入 4 位數字");
+            myPin = document.getElementById('pin-in').value;
+            if(myPin.length !== 4) return alert("PIN需為4位數");
             socket.emit('check_pin', myPin);
         }
 
         socket.on('pin_result', res => {
-            if(res.exists) {
-                // 已有資料，直接發送登入
-                socket.emit('save_profile', res.user);
-            } else {
-                showStep('step-profile');
-            }
+            if(res.exists) { socket.emit('save_profile', res.user); } else { v('step-profile'); }
         });
 
         function saveProfile() {
-            const name = document.getElementById('name-input').value;
-            if(!name) return alert("請輸入暱稱");
-            socket.emit('save_profile', { pin: myPin, username: name, avatar: myAvatar });
+            const n = document.getElementById('name-in').value;
+            if(!n) return alert("請輸入暱稱");
+            socket.emit('save_profile', { pin: myPin, username: n, avatar: myAvatar });
         }
 
         socket.on('auth_success', user => {
-            document.getElementById('display-av').innerText = user.avatar;
-            document.getElementById('display-name').innerText = user.username;
-            showStep('step-lobby');
+            myUser = user;
+            document.getElementById('welcome').innerText = `${user.avatar} ${user.username}`;
+            v('step-lobby');
         });
 
-        socket.on('room_created', id => alert("房間建立成功！房號：" + id));
-        function joinRoom() {
-            const id = document.getElementById('join-id').value;
-            if(id) socket.emit('join_room', id);
-        }
-        socket.on('join_success', id => alert("成功進入房間：" + id));
+        function joinRoom() { socket.emit('join_room', { roomId: document.getElementById('rid-in').value, user: myUser }); }
+        socket.on('room_created', rid => { socket.emit('join_room', { roomId: rid, user: myUser }); });
+        socket.on('room_update', r => alert(`已在房間 #${r.id}，人數: ${r.players.length}`));
+        socket.on('force_leave', m => { alert(m); location.reload(); });
+        socket.on('toast', m => alert(m));
     </script>
 </body>
 </html>
