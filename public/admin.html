@@ -1,118 +1,17 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>PartyBox 管理員後台</title>
+    <title>PartyBox Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <style>
-        body { background: #020617; color: #e2e8f0; font-family: 'Inter', sans-serif; }
-        .stat-card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(51, 65, 85, 0.5); backdrop-filter: blur(10px); }
-        .row-item:hover { background: rgba(255, 255, 255, 0.02); }
-    </style>
 </head>
-<body class="p-8">
-
-    <div id="admin-auth" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center">
-        <div class="w-80 text-center">
-            <h1 class="text-2xl font-bold mb-6 text-cyan-400">Admin Console</h1>
-            <input id="admin-pin" type="password" placeholder="管理員密鑰" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-center mb-4">
-            <button onclick="login()" class="w-full bg-cyan-600 p-4 rounded-xl font-bold">進入系統</button>
-        </div>
+<body class="bg-slate-950 text-white p-10">
+    <h1 class="text-3xl font-black mb-10 text-cyan-500 italic">ADMIN 控制台</h1>
+    <div class="grid grid-cols-2 gap-4 max-w-md">
+        <button onclick="parent.openGameConfig('SPY')" class="bg-slate-800 p-6 rounded-2xl border border-white/10 hover:border-cyan-500 transition">誰是臥底</button>
+        <button onclick="parent.openGameConfig('BINGO')" class="bg-slate-800 p-6 rounded-2xl border border-white/10 hover:border-cyan-500 transition">Bingo</button>
+        <button onclick="parent.openGameConfig('GUESS')" class="bg-slate-800 p-6 rounded-2xl border border-white/10 hover:border-cyan-500 transition">你話我猜</button>
+        <button onclick="parent.openGameConfig('MEMORY')" class="bg-slate-800 p-6 rounded-2xl border border-white/10 hover:border-cyan-500 transition">記憶翻牌</button>
     </div>
-
-    <div class="max-w-6xl mx-auto">
-        <header class="flex justify-between items-center mb-10">
-            <div>
-                <h1 class="text-3xl font-black italic tracking-tighter">ADMIN <span class="text-cyan-500">DASHBOARD</span></h1>
-                <p class="text-slate-500 text-sm">系統狀態：<span class="text-emerald-500">運行中</span></p>
-            </div>
-            <button onclick="location.reload()" class="bg-slate-800 px-4 py-2 rounded-lg text-sm border border-slate-700">重新整理數據</button>
-        </header>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-            <div class="stat-card p-6 rounded-2xl">
-                <p class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">總註冊玩家</p>
-                <h2 id="total-users" class="text-4xl font-mono text-cyan-400">0</h2>
-            </div>
-            <div id="active-rooms-card" class="stat-card p-6 rounded-2xl border-l-4 border-l-blue-500">
-                <p class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">當前活躍房間</p>
-                <h2 id="total-rooms" class="text-4xl font-mono text-blue-400">0</h2>
-            </div>
-            <div class="stat-card p-6 rounded-2xl">
-                <p class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">伺服器延遲</p>
-                <h2 class="text-4xl font-mono text-emerald-400">12ms</h2>
-            </div>
-        </div>
-
-        <div class="stat-card rounded-2xl overflow-hidden mb-10">
-            <div class="p-6 border-b border-slate-800 flex justify-between items-center">
-                <h3 class="font-bold">玩家名冊與積分控制</h3>
-                <input type="text" placeholder="搜尋 PIN 或 暱稱..." class="bg-slate-900 border border-slate-800 px-4 py-1 rounded-lg text-xs outline-none focus:border-cyan-500">
-            </div>
-            <table class="w-full text-left text-sm">
-                <thead class="bg-slate-900/50 text-slate-500 uppercase text-[10px] tracking-wider">
-                    <tr>
-                        <th class="p-4">PIN</th>
-                        <th class="p-4">頭像/暱稱</th>
-                        <th class="p-4 text-center">當前積分</th>
-                        <th class="p-4 text-right">管理操作</th>
-                    </tr>
-                </thead>
-                <tbody id="user-table-body">
-                    </tbody>
-            </table>
-        </div>
-    </div>
-
-    <script>
-        const socket = io();
-
-        function login() {
-            const pin = document.getElementById('admin-pin').value;
-            socket.emit('admin_login', pin);
-        }
-
-        socket.on('admin_auth_success', (data) => {
-            document.getElementById('admin-auth').classList.add('hidden');
-            renderData(data);
-        });
-
-        function renderData(data) {
-            document.getElementById('total-users').innerText = data.users.length;
-            document.getElementById('total-rooms').innerText = data.rooms.length;
-
-            const table = document.getElementById('user-table-body');
-            table.innerHTML = data.users.map(u => `
-                <tr class="row-item border-b border-slate-800/50">
-                    <td class="p-4 font-mono text-cyan-500">${u.pin}</td>
-                    <td class="p-4">
-                        <div class="flex items-center gap-3">
-                            <span class="text-xl">${u.avatar}</span>
-                            <span class="font-bold">${u.username}</span>
-                        </div>
-                    </td>
-                    <td class="p-4 text-center">
-                        <input type="number" value="${u.score}" 
-                            onchange="updateScore('${u.pin}', this.value)"
-                            class="bg-slate-900 border border-slate-700 w-20 text-center rounded py-1">
-                    </td>
-                    <td class="p-4 text-right">
-                        <button class="text-red-500 hover:underline text-xs">禁言</button>
-                        <span class="mx-2 text-slate-800">|</span>
-                        <button class="text-slate-400 hover:underline text-xs">刪除</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        function updateScore(pin, newScore) {
-            socket.emit('admin_update_score', { pin, newScore });
-        }
-
-        socket.on('admin_action_done', (msg) => {
-            alert(msg);
-        });
-    </script>
 </body>
 </html>
