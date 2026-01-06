@@ -3,55 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PartyBox 派對盒</title>
+    <title>PartyBox</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>.hidden { display: none !important; }</style>
 </head>
-<body class="bg-indigo-50 min-h-screen flex items-center justify-center p-6 text-slate-700 font-sans">
+<body class="bg-indigo-50 min-h-screen flex items-center justify-center p-6 text-slate-700">
 
     <section id="step-pin" class="bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-sm text-center space-y-6">
-        <div class="space-y-2">
-            <h1 class="text-3xl font-black text-indigo-500 italic">PartyBox</h1>
-            <div class="bg-indigo-50 p-4 rounded-2xl text-left border border-indigo-100">
-                <p class="text-xs text-indigo-400 font-bold mb-1">📌 PIN 碼說明：</p>
-                <ul class="text-[11px] text-slate-500 space-y-1 list-disc ml-3">
-                    <li>輸入任意 4 位數字作為你的專屬代碼。</li>
-                    <li>新代碼將自動建立帳號，舊代碼可恢復進度。</li>
-                    <li>請記住你的代碼，這是唯一的登入憑證。</li>
-                </ul>
-            </div>
+        <div class="text-left bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+            <h3 class="text-xs font-bold text-indigo-500 mb-1">📌 PIN 碼說明</h3>
+            <p class="text-[10px] text-indigo-400 leading-relaxed">這是您的唯一憑證。輸入 4 位數字，新號碼將建立存檔，舊號碼可恢復數據。請務必記牢！</p>
         </div>
-        
-        <input id="pin-in" type="number" placeholder="請輸入 4 位數 PIN" 
-               class="w-full text-center text-3xl p-4 bg-slate-100 rounded-2xl outline-none border-2 border-transparent focus:border-indigo-400 transition-all">
-        
-        <button onclick="checkPin()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-2xl shadow-lg hover:bg-indigo-600 transition">確定進入</button>
+        <input id="pin-in" type="number" placeholder="0000" class="w-full text-center text-4xl p-4 bg-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-400">
+        <button onclick="checkPin()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-2xl">下一步</button>
     </section>
 
     <section id="step-profile" class="hidden bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-sm text-center space-y-6">
-        <h2 class="text-xl font-bold text-slate-800">最後一步：角色設定</h2>
+        <h2 class="text-xl font-bold">設定角色</h2>
         <div class="flex justify-center gap-3">
-            <button onclick="selAv('🐶', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-indigo-500 transition-all">🐶</button>
-            <button onclick="selAv('🐱', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-transparent transition-all">🐱</button>
-            <button onclick="selAv('🦊', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-transparent transition-all">🦊</button>
+            <button onclick="selAv('🐶', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-indigo-500">🐶</button>
+            <button onclick="selAv('🐱', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-transparent">🐱</button>
+            <button onclick="selAv('🦊', this)" class="av-btn text-3xl p-3 border-2 rounded-2xl border-transparent">🦊</button>
         </div>
-        <input id="name-in" type="text" placeholder="請輸入你的暱稱" 
-               class="w-full p-4 bg-slate-100 rounded-2xl text-center font-bold outline-none border-2 border-transparent focus:border-indigo-400">
-        
-        <button id="btn-save" onclick="saveProfile()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-2xl shadow-lg hover:bg-indigo-600 transition">完成設定</button>
+        <input id="name-in" type="text" placeholder="輸入暱稱" class="w-full p-4 bg-slate-100 rounded-2xl text-center outline-none">
+        <button id="save-btn" onclick="saveProfile()" class="w-full p-4 bg-indigo-500 text-white font-bold rounded-2xl">完成並進入</button>
     </section>
 
     <section id="step-lobby" class="hidden bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-sm text-center space-y-6">
-        <div class="flex flex-col items-center gap-2">
-            <div id="welcome-av" class="text-5xl"></div>
-            <div id="welcome-name" class="text-2xl font-black text-indigo-600"></div>
+        <div class="flex flex-col items-center">
+            <div id="w-av" class="text-5xl mb-2"></div>
+            <div id="w-nm" class="text-2xl font-black text-indigo-600"></div>
         </div>
-        <div class="h-[1px] bg-slate-100 w-full"></div>
-        <button onclick="socket.emit('create_room')" class="w-full p-6 bg-indigo-500 text-white rounded-3xl font-bold shadow-lg text-lg hover:scale-105 transition">✨ 建立新房間</button>
-        <div class="space-y-2">
-            <input id="rid-in" type="number" placeholder="請輸入 4 位房號" class="w-full p-4 bg-slate-50 rounded-2xl text-center outline-none border focus:border-indigo-200">
-            <button onclick="joinRoom()" class="w-full p-3 bg-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-300">加入現有房間</button>
+        <button onclick="socket.emit('create_room')" class="w-full p-6 bg-indigo-500 text-white rounded-3xl font-bold shadow-lg">✨ 建立新房間</button>
+        <div class="pt-4 border-t space-y-2">
+            <input id="rid-in" type="number" placeholder="輸入房號" class="w-full p-4 bg-slate-50 rounded-2xl text-center">
+            <button onclick="joinRoom()" class="w-full p-3 bg-slate-200 text-slate-500 rounded-2xl font-bold">加入房間</button>
         </div>
     </section>
 
@@ -59,74 +46,42 @@
         const socket = io();
         let myPin = '', myAvatar = '🐶', myUser = null;
 
-        // 切換畫面
-        function v(id) { 
-            document.querySelectorAll('section').forEach(s => s.classList.add('hidden')); 
-            const target = document.getElementById(id);
-            if(target) target.classList.remove('hidden');
-        }
+        function v(id) { document.querySelectorAll('section').forEach(s => s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
+        function selAv(av, el) { myAvatar = av; document.querySelectorAll('.av-btn').forEach(b => b.classList.replace('border-indigo-500', 'border-transparent')); el.classList.replace('border-transparent', 'border-indigo-500'); }
 
-        // 頭像選擇
-        function selAv(av, el) { 
-            myAvatar = av; 
-            document.querySelectorAll('.av-btn').forEach(b => {
-                b.classList.remove('border-indigo-500');
-                b.classList.add('border-transparent');
-            }); 
-            el.classList.remove('border-transparent');
-            el.classList.add('border-indigo-500'); 
-        }
-
-        // 檢查 PIN
         function checkPin() {
-            const val = document.getElementById('pin-in').value;
-            if(!val || val.length !== 4) return alert("請輸入 4 位數字 PIN 碼！");
-            myPin = val;
+            myPin = document.getElementById('pin-in').value;
+            if(myPin.length !== 4) return alert("請輸入 4 位數 PIN");
             socket.emit('check_pin', myPin);
         }
 
         socket.on('pin_result', res => {
-            if(res.exists) { 
-                // 已有存檔直接登入
-                socket.emit('save_profile', res.user); 
-            } else { 
-                // 新玩家去設定
-                v('step-profile'); 
-            }
+            if(res.exists) socket.emit('save_profile', res.user);
+            else v('step-profile');
         });
 
-        // 保存資料 (修正按不下去的問題)
         function saveProfile() {
-            const n = document.getElementById('name-in').value.trim();
-            if(!n) return alert("暱稱不能為空喔！");
-            
-            // 停用按鈕防止重複點擊
-            const btn = document.getElementById('btn-save');
-            btn.disabled = true;
-            btn.innerText = "儲存中...";
-
-            socket.emit('save_profile', { 
-                pin: myPin, 
-                username: n, 
-                avatar: myAvatar 
-            });
+            const n = document.getElementById('name-in').value;
+            if(!n) return alert("暱稱必填");
+            document.getElementById('save-btn').innerText = "儲存中...";
+            document.getElementById('save-btn').disabled = true;
+            socket.emit('save_profile', { pin: myPin, username: n, avatar: myAvatar });
         }
 
         socket.on('auth_success', user => {
             myUser = user;
-            document.getElementById('welcome-av').innerText = user.avatar;
-            document.getElementById('welcome-name').innerText = user.username;
+            document.getElementById('w-av').innerText = user.avatar;
+            document.getElementById('w-nm').innerText = user.username;
             v('step-lobby');
         });
 
         function joinRoom() { 
             const rid = document.getElementById('rid-in').value;
-            if(!rid) return alert("請輸入房號！");
             socket.emit('join_room', { roomId: rid, user: myUser }); 
         }
-        
-        socket.on('room_created', rid => { socket.emit('join_room', { roomId: rid, user: myUser }); });
-        socket.on('room_update', r => alert(`成功加入房間 #${r.id}`));
+
+        socket.on('room_created', rid => socket.emit('join_room', { roomId: rid, user: myUser }));
+        socket.on('room_update', r => alert(`已在房間 #${r.id}`));
         socket.on('force_leave', m => { alert(m); location.reload(); });
     </script>
 </body>
