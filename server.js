@@ -8,78 +8,66 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// 1. 修復 Admin 進入點：輸入 /admin 即可訪問
+// --- 重要：解決 Admin 頁面進入點 ---
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 let memoryDB = {}; 
 let rooms = {};
-const spyWords = [['蘋果', '梨子'], ['醫生', '護士'], ['火鍋', '燒烤'], ['珍珠奶茶', '絲襪奶茶']];
+const spyLibrary = [['蘋果', '梨子'], ['醫生', '護士'], ['火鍋', '燒烤'], ['珍珠奶茶', '絲襪奶茶']];
 
 io.on('connection', (socket) => {
-    // 基礎登入邏輯
+    // 登入與房間邏輯
     socket.on('check_pin', (pin) => {
-        const u = memoryDB[pin];
-        socket.emit('pin_result', { exists: !!u, user: u });
+        socket.emit('pin_result', { exists: !!memoryDB[pin], user: memoryDB[pin] });
     });
 
     socket.on('save_profile', (data) => {
         memoryDB[data.pin] = { ...data, score: memoryDB[data.pin]?.score || 0 };
+        socket.userPin = data.pin;
         socket.emit('auth_success', memoryDB[data.pin]);
     });
 
-    // 建立/加入房間 (使用 PIN 鎖定 Host)
     socket.on('create_room', (user) => {
         const rid = Math.floor(1000 + Math.random() * 9000).toString();
-        rooms[rid] = { id: rid, hostPin: user.pin, players: [], status: 'LOBBY' };
+        rooms[rid] = { id: rid, hostPin: user.pin, players: [] };
         socket.emit('room_created', rid);
     });
 
     socket.on('join_room', (data) => {
-        const r = rooms[data.roomId];
-        if (r) {
+        if (rooms[data.roomId]) {
             socket.join(data.roomId);
             socket.roomId = data.roomId;
-            socket.userPin = data.user.pin;
-            if (!r.players.find(p => p.pin === data.user.pin)) r.players.push({...data.user, socketId: socket.id});
-            io.to(data.roomId).emit('room_sync', { room: r, hostPin: r.hostPin });
+            if (!rooms[data.roomId].players.find(p => p.pin === data.user.pin)) {
+                rooms[data.roomId].players.push({ ...data.user, socketId: socket.id });
+            }
+            io.to(data.roomId).emit('room_sync', { room: rooms[data.roomId], hostPin: rooms[data.roomId].hostPin });
         }
     });
 
-    // --- 遊戲啟動流程 (設定頁跳轉) ---
+    // --- 遊戲啟動控制 ---
     socket.on('confirm_start', (data) => {
         const r = rooms[socket.roomId];
         if (!r || r.hostPin !== socket.userPin) return;
 
         if (data.mode === 'SPY') {
-            const pair = spyWords[Math.floor(Math.random() * spyWords.length)];
+            const pair = spyLibrary[Math.floor(Math.random() * spyLibrary.length)];
             const spyIdx = Math.floor(Math.random() * r.players.length);
             r.players.forEach((p, i) => {
                 io.to(p.socketId).emit('game_init', { 
-                    type: 'SPY', timer: data.val, role: (i===spyIdx?'臥底':'平民'), word: (i===spyIdx?pair[1]:pair[0]) 
+                    type: 'SPY', word: (i===spyIdx?pair[1]:pair[0]), role: (i===spyIdx?'臥底':'平民'), timer: data.val 
                 });
             });
-        } 
-        else if (data.mode === 'BINGO') {
+        } else if (data.mode === 'BINGO') {
             io.to(socket.roomId).emit('game_init', { type: 'BINGO', targetLines: data.val });
-        }
-        else if (data.mode === 'GUESS') {
-            io.to(socket.roomId).emit('game_init', { type: 'GUESS', totalRounds: data.val, currentRound: 1 });
+        } else if (data.mode === 'GUESS') {
+            io.to(socket.roomId).emit('game_init', { type: 'GUESS', rounds: data.val });
         }
     });
 
-    // 遊戲中即時同步 (畫布、投票、喊號)
+    // 同步畫布與遊戲動作
     socket.on('draw_data', (pos) => socket.to(socket.roomId).emit('on_draw', pos));
-    socket.on('bingo_call', (num) => io.to(socket.roomId).emit('on_bingo_call', num));
-    
-    // 結算與加分
-    socket.on('game_win', (points) => {
-        if (memoryDB[socket.userPin]) {
-            memoryDB[socket.userPin].score += points;
-            io.emit('rank_update', Object.values(memoryDB).sort((a,b)=>b.score-a.score).slice(0,5));
-        }
-    });
 });
 
-server.listen(3000);
+server.listen(process.env.PORT || 3000, () => console.log('Server Ready'));
