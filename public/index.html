@@ -3,73 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PartyBox Pro</title>
+    <title>PartyBox Player</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { background: #020617; color: white; overflow: hidden; }
-        .view { display: none; min-height: 100vh; flex-direction: column; padding: 20px; }
+        body { background: #020617; color: white; overflow-x: hidden; font-family: system-ui, -apple-system, sans-serif; }
+        .view { display: none; min-height: 100vh; flex-direction: column; padding: 24px; }
         .active { display: flex; }
-        .glass { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
-        .bingo-cell { aspect-ratio: 1; border: 1px solid #334155; border-radius: 12px; font-weight: bold; font-size: 24px; transition: 0.3s; }
-        .bingo-active { background: #0891b2; border-color: #22d3ee; box-shadow: 0 0 15px #0891b2; }
+        .glass { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(12px); }
+        .bingo-cell { aspect-ratio: 1; border: 1px solid #1e293b; border-radius: 12px; font-weight: 800; font-size: 22px; transition: all 0.2s ease; }
+        .bingo-active { background: linear-gradient(135deg, #0891b2, #06b6d4); border-color: #22d3ee; box-shadow: 0 0 20px rgba(8,145,178,0.5); transform: scale(0.95); }
+        .btn-host { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid rgba(255,215,0,0.3); }
     </style>
 </head>
 <body>
 
-    <div id="cfg-modal" class="hidden fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-6 text-center">
-        <div class="glass p-8 rounded-[3rem] w-full max-w-sm">
-            <h3 id="cfg-title" class="text-2xl font-black mb-4 text-cyan-400">遊戲設定</h3>
-            <p id="cfg-desc" class="text-sm text-slate-400 mb-6"></p>
-            <input id="cfg-input" type="number" class="w-full bg-white/10 p-4 rounded-2xl text-center mb-8 border border-white/10 text-xl outline-none">
-            <button onclick="launchGame()" class="w-full bg-cyan-600 p-4 rounded-2xl font-black text-lg">正式啟動</button>
+    <div id="cfg-modal" class="hidden fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-6 backdrop-blur-md">
+        <div class="glass p-8 rounded-[2.5rem] w-full max-w-sm border border-cyan-500/30">
+            <h3 id="cfg-title" class="text-2xl font-black mb-2 text-cyan-400">模式設定</h3>
+            <p id="cfg-desc" class="text-xs text-slate-400 mb-8"></p>
+            <div class="relative mb-8">
+                <input id="cfg-input" type="number" class="w-full bg-slate-900/50 p-5 rounded-2xl text-center text-2xl font-bold border border-white/10 focus:border-cyan-500 outline-none transition-all">
+                <span class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold" id="cfg-unit"></span>
+            </div>
+            <button onclick="launchGame()" class="w-full bg-cyan-600 hover:bg-cyan-500 p-5 rounded-2xl font-black text-lg shadow-lg shadow-cyan-900/20 active:scale-95 transition">確認啟動</button>
+            <button onclick="document.getElementById('cfg-modal').classList.add('hidden')" class="mt-4 text-slate-500 text-sm font-bold">取消</button>
         </div>
     </div>
 
     <section id="v-room" class="view active">
-        <div class="flex justify-between items-center mb-6">
-            <h2 id="r-id" class="text-5xl font-black tracking-tighter">----</h2>
-            <div class="glass px-4 py-2 rounded-full text-xs font-bold text-cyan-400">等待中</div>
+        <div class="flex justify-between items-start mb-8">
+            <div>
+                <p class="text-[10px] font-black text-cyan-500 tracking-[0.2em] mb-1">ROOM ID</p>
+                <h2 id="r-id" class="text-6xl font-black tracking-tighter">----</h2>
+            </div>
+            <div id="room-status-tag" class="glass px-4 py-2 rounded-full text-[10px] font-black text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-900/10">等待玩家...</div>
         </div>
-        <div id="player-list" class="space-y-3 flex-1 overflow-y-auto"></div>
 
-        <div id="host-controls" class="hidden mt-6">
-            <p class="text-[10px] text-slate-500 font-bold mb-4 uppercase tracking-widest text-center">遊戲選擇</p>
-            <div class="grid grid-cols-2 gap-3">
-                <button onclick="socket.emit('host_setup_trigger','SPY')" class="glass p-5 rounded-3xl flex flex-col items-center gap-2">
-                    <span class="text-3xl">🕵️</span><span class="text-xs font-bold">誰是臥底</span>
+        <div class="mb-4 flex items-center gap-2">
+            <span class="w-2 h-2 bg-cyan-500 rounded-full animate-pulse"></span>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Player List</span>
+        </div>
+        
+        <div id="player-list" class="space-y-3 flex-1 overflow-y-auto pr-2">
+            </div>
+
+        <div id="host-controls" class="hidden mt-8 p-6 glass rounded-[2rem] border-t border-white/10 bg-gradient-to-b from-white/5 to-transparent">
+            <div class="flex items-center gap-2 mb-6">
+                <div class="w-1 h-4 bg-yellow-500 rounded-full"></div>
+                <p class="text-[10px] text-yellow-500 font-black uppercase tracking-widest">Host Command Center</p>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="socket.emit('host_setup_trigger','SPY')" class="btn-host p-5 rounded-3xl flex flex-col items-center gap-3 active:scale-95 transition">
+                    <span class="text-4xl">🕵️</span>
+                    <span class="text-[10px] font-black tracking-widest">誰是臥底</span>
                 </button>
-                <button onclick="socket.emit('host_setup_trigger','BINGO')" class="glass p-5 rounded-3xl flex flex-col items-center gap-2">
-                    <span class="text-3xl">🔢</span><span class="text-xs font-bold">Bingo</span>
+                <button onclick="socket.emit('host_setup_trigger','BINGO')" class="btn-host p-5 rounded-3xl flex flex-col items-center gap-3 active:scale-95 transition">
+                    <span class="text-4xl">🔢</span>
+                    <span class="text-[10px] font-black tracking-widest">BINGO</span>
                 </button>
             </div>
         </div>
     </section>
 
     <section id="v-play" class="view">
-        <div id="game-ui" class="flex-1 flex flex-col justify-center items-center"></div>
+        <div id="game-ui" class="flex-1 flex flex-col justify-center items-center">
+            </div>
     </section>
 
     <script>
         const socket = io();
-        let myUser = null, currentPendingMode = '', bingoCount = 0;
+        let myUser = JSON.parse(localStorage.getItem('partyUser') || 'null');
+        let currentPendingMode = '', bingoCount = 0;
 
-        // --- 視圖切換 ---
+        // 初始化檢查
+        if (!myUser) { location.href = '/'; } // 若沒資料回首頁登入
+        
         function go(id) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(id).classList.add('active');
         }
 
-        // --- 房主設定 ---
+        // --- 房主設定視窗控制 ---
         socket.on('open_config_ui', (mode) => {
             currentPendingMode = mode;
-            document.getElementById('cfg-modal').classList.remove('hidden');
+            const modal = document.getElementById('cfg-modal');
             const input = document.getElementById('cfg-input');
             const desc = document.getElementById('cfg-desc');
             const title = document.getElementById('cfg-title');
-            
-            if(mode === 'SPY') { title.innerText="誰是臥底"; desc.innerText="請設定討論秒數"; input.value=60; }
-            if(mode === 'BINGO') { title.innerText="Bingo"; desc.innerText="請設定獲勝連線數"; input.value=3; }
+            const unit = document.getElementById('cfg-unit');
+
+            modal.classList.remove('hidden');
+            if(mode === 'SPY') { 
+                title.innerText="誰是臥底"; desc.innerText="每人發言討論時間"; input.value=60; unit.innerText="秒";
+            } else if(mode === 'BINGO') { 
+                title.innerText="BINGO"; desc.innerText="先達成幾條線獲勝"; input.value=3; unit.innerText="條";
+            }
         });
 
         function launchGame() {
@@ -78,46 +107,81 @@
             document.getElementById('cfg-modal').classList.add('hidden');
         }
 
-        // --- 遊戲初始化 (重點：解決黑畫面) ---
+        // --- 遊戲渲染邏輯 ---
         socket.on('game_init', (data) => {
             go('v-play');
             const container = document.getElementById('game-ui');
             if(data.type === 'BINGO') {
                 bingoCount = 0;
                 container.innerHTML = `
-                    <p class="text-cyan-500 mb-6 font-bold animate-pulse">依序觸控 1-25 號填滿</p>
-                    <div id="b-grid" class="grid grid-cols-5 gap-2 w-full max-w-sm"></div>
+                    <div class="text-center mb-8">
+                        <p class="text-cyan-400 font-black text-xs tracking-widest mb-2 uppercase">Bingo Setup</p>
+                        <h3 class="text-2xl font-black">點擊格子填入 1-25</h3>
+                    </div>
+                    <div id="b-grid" class="grid grid-cols-5 gap-2 w-full max-w-sm aspect-square"></div>
                 `;
                 for(let i=0; i<25; i++) {
                     const btn = document.createElement('button');
-                    btn.className = 'bingo-cell glass';
+                    btn.className = 'bingo-cell glass flex items-center justify-center';
                     btn.onclick = () => {
                         if(btn.innerText) return;
                         bingoCount++;
                         btn.innerText = bingoCount;
                         btn.classList.add('bingo-active');
-                        if(bingoCount === 25) socket.emit('bingo_ready');
+                        if(bingoCount === 25) {
+                            btn.parentElement.innerHTML = '<div class="text-center animate-bounce"><p class="text-4xl mb-4">✅</p><p class="font-bold">填號完成，等待開戰</p></div>';
+                            socket.emit('bingo_ready');
+                        }
                     };
                     document.getElementById('b-grid').appendChild(btn);
                 }
             } else if(data.type === 'SPY') {
                 container.innerHTML = `
-                    <p class="text-slate-500 mb-2">你的題目</p>
-                    <h1 class="text-6xl font-black text-cyan-400 mb-8">${data.word}</h1>
-                    <div id="timer" class="text-4xl font-mono text-red-500">${data.timer}s</div>
+                    <div class="text-center p-12 glass rounded-[3rem] border border-white/10">
+                        <p class="text-slate-500 font-bold mb-4">你的身份：<span class="text-white">${data.role}</span></p>
+                        <p class="text-[10px] text-cyan-500 tracking-widest mb-2 uppercase">Your Word</p>
+                        <h1 class="text-7xl font-black text-white mb-10 tracking-tighter">${data.word}</h1>
+                        <div id="timer" class="text-4xl font-mono text-red-500 bg-red-500/10 py-4 rounded-2xl border border-red-500/20">${data.timer}s</div>
+                    </div>
                 `;
+                let s = data.timer;
+                const t = setInterval(() => {
+                    s--; document.getElementById('timer').innerText = s + 's';
+                    if(s <= 0) { clearInterval(t); document.getElementById('timer').innerText = "時間到！"; }
+                }, 1000);
             }
         });
 
+        // --- 房間數據同步 ---
         socket.on('room_sync', (data) => {
             document.getElementById('r-id').innerText = data.room.id;
-            // 判斷是否顯示房主控制台 (這行是關鍵)
+            
+            // 渲染玩家列表
+            const pList = document.getElementById('player-list');
+            pList.innerHTML = data.room.players.map(p => `
+                <div class="glass p-5 rounded-[1.5rem] flex justify-between items-center border border-white/5">
+                    <div class="flex items-center gap-4">
+                        <span class="text-2xl">${p.avatar}</span>
+                        <span class="font-bold">${p.username}</span>
+                    </div>
+                    ${p.pin === data.hostPin ? '<span class="text-[8px] bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded-md font-black">HOST</span>' : ''}
+                </div>
+            `).join('');
+
+            // 重要：判斷房主權限
             if (myUser && data.hostPin === myUser.pin) {
                 document.getElementById('host-controls').classList.remove('hidden');
+                document.getElementById('room-status-tag').innerText = "你是房主";
+                document.getElementById('room-status-tag').className = "glass px-4 py-2 rounded-full text-[10px] font-black text-yellow-400 border border-yellow-500/20 shadow-lg shadow-yellow-900/10";
             }
         });
 
-        socket.on('auth_success', (user) => { myUser = user; });
+        // 重新連接或重新加入房間
+        const rid = new URLSearchParams(window.location.search).get('rid');
+        if (rid && myUser) {
+            socket.emit('join_room', { roomId: rid, user: myUser });
+            socket.emit('save_profile', myUser); // 確保後端 memoryDB 有資料
+        }
     </script>
 </body>
 </html>
